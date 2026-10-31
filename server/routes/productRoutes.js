@@ -1,4 +1,5 @@
 const express = require('express');
+const upload = require('../middleware/uploadMiddleware');
 
 const {
     getProducts,
@@ -7,8 +8,9 @@ const {
     createProduct,
     updateProduct,
     deactivateProduct,
+    uploadProductImages,
+    deleteProductImage,
 } = require('../controllers/productController');
-
 const validate = require('../middleware/validateMiddleware');
 
 const {
@@ -47,6 +49,22 @@ router.post(
     authorizeAdmin,
     validate(productSchema),
     createProduct
+);
+// Admin: upload product images
+router.post(
+    '/:id/images',
+    protect,
+    authorizeAdmin,
+    upload.array('images', 5),
+    uploadProductImages
+);
+
+// Admin: delete a product image
+router.delete(
+    '/:id/images/:imageId',
+    protect,
+    authorizeAdmin,
+    deleteProductImage
 );
 
 router.patch(

@@ -21,6 +21,17 @@ const errorMiddleware = (err, req, res, next) => {
             message: item.message,
         }));
     }
+    if (err instanceof require('multer').MulterError) {
+        statusCode = 400;
+    
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            message = 'Image size must not exceed 5 MB';
+        } else if (err.code === 'LIMIT_FILE_COUNT') {
+            message = 'You can upload a maximum of 5 images at once';
+        } else {
+            message = 'Image upload request is invalid';
+        }
+    }
 
     // MongoDB duplicate key errors
     else if (err.code === 11000) {

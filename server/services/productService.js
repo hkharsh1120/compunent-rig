@@ -166,6 +166,45 @@ const deactivateProduct = async (id) => {
 
     return product;
 };
+const addProductImages = async (id, images) => {
+    const product = await Product.findById(id);
+
+    if (!product) {
+        throw new ApiError(404, 'Product not found');
+    }
+
+    if (product.images.length + images.length > 10) {
+        throw new ApiError(400, 'A product can have at most 10 images');
+    }
+
+    product.images.push(...images);
+
+    await product.save();
+
+    return product;
+};
+
+const removeProductImage = async (id, imageId) => {
+    const product = await Product.findById(id);
+
+    if (!product) {
+        throw new ApiError(404, 'Product not found');
+    }
+
+    const image = product.images.id(imageId);
+
+    if (!image) {
+        throw new ApiError(404, 'Product image not found');
+    }
+
+    const publicId = image.publicId;
+
+    product.images.pull({ _id: imageId });
+
+    await product.save();
+
+    return publicId;
+};
 
 module.exports = {
     createProduct,
@@ -173,4 +212,6 @@ module.exports = {
     getProductBySlug,
     updateProduct,
     deactivateProduct,
+    addProductImages,
+    removeProductImage,
 };

@@ -8,6 +8,9 @@ import Login from './pages/Login';
 
 import ProtectedRoute from './components/ProtectedRoute';
 import Account from './pages/Account';
+import Products from './pages/Products';
+import ProductDetails from './pages/ProductDetails';
+import Cart from './pages/Cart';
 
 function Home() {
     const [health, setHealth] = useState(null);
@@ -106,6 +109,9 @@ function App() {
             <Route path="*" element={<NotFound />} />
             <Route element={<ProtectedRoute />}>
     <Route path="/account" element={<Account />} />
+    <Route path="/products" element={<Products />} />
+    <Route path="/products/:slug" element={<ProductDetails />} />
+    <Route path="/cart" element={<Cart />} />
 </Route>
         </Routes>
     );
