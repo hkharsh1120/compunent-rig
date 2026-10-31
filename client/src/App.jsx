@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
 import { getHealthStatus } from './services/healthService';
+import { Routes, Route } from 'react-router-dom';
+
+import Register from './pages/Register';
+import Login from './pages/Login';
+
+import ProtectedRoute from './components/ProtectedRoute';
+import Account from './pages/Account';
 
 function Home() {
     const [health, setHealth] = useState(null);
@@ -89,12 +95,19 @@ function NotFound() {
 
 function App() {
     return (
-        <BrowserRouter>
-            <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="*" element={<NotFound />} />
-            </Routes>
-        </BrowserRouter>
+        <Routes>
+            <Route path="/" element={<Home />} />
+
+            <Route path="/register" element={<Register />} />
+            <Route path="/login" element={<Login />} />
+
+            {/* Protected routes will be added here */}
+
+            <Route path="*" element={<NotFound />} />
+            <Route element={<ProtectedRoute />}>
+    <Route path="/account" element={<Account />} />
+</Route>
+        </Routes>
     );
 }
 

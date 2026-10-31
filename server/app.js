@@ -22,6 +22,9 @@ app.use(cookieParser());
 // API routes
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/categories', require('./routes/categoryRoutes'));
+app.use('/api/brands', require('./routes/brandRoutes'));
+app.use('/api/products', require('./routes/productRoutes'));
 
 // 404 handler
 app.use(notFoundMiddleware);
