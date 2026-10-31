@@ -1,8 +1,13 @@
+
+const ApiError = require('../utils/ApiError');
+
 const notFoundMiddleware = (req, res, next) => {
-    res.status(404).json({
-        success: false,
-        message: `Route not found: ${req.originalUrl}`,
-    });
+    next(
+        new ApiError(
+            404,
+            `Route not found: ${req.originalUrl}`
+        )
+    );
 };
 
 module.exports = notFoundMiddleware;
