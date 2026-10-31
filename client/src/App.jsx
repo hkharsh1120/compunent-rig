@@ -1,122 +1,101 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
-function App() {
-  const [count, setCount] = useState(0)
+import { getHealthStatus } from './services/healthService';
 
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+function Home() {
+    const [health, setHealth] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
-      <div className="ticks"></div>
+    useEffect(() => {
+        const checkBackend = async () => {
+            try {
+                const data = await getHealthStatus();
+                setHealth(data);
+            } catch (err) {
+                setError(
+                    err.response?.data?.message ||
+                    'Unable to connect to backend'
+                );
+            } finally {
+                setLoading(false);
+            }
+        };
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        checkBackend();
+    }, []);
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+    return (
+        <main className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6">
+            <h1 className="text-4xl font-bold mb-3">
+                COMPUNENT RIG
+            </h1>
+
+            <p className="text-slate-400 mb-8">
+                Computer Hardware & Custom Builds
+            </p>
+
+            <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md">
+                <h2 className="text-xl font-semibold mb-4">
+                    System Status
+                </h2>
+
+                {loading && (
+                    <p className="text-yellow-400">
+                        Checking backend connection...
+                    </p>
+                )}
+
+                {error && (
+                    <p className="text-red-400">
+                        {error}
+                    </p>
+                )}
+
+                {health && (
+                    <div className="space-y-3">
+                        <p className="text-green-400">
+                            Backend: Connected
+                        </p>
+
+                        <p className={
+                            health.database === 'Connected'
+                                ? 'text-green-400'
+                                : 'text-red-400'
+                        }>
+                            Database: {health.database}
+                        </p>
+
+                        <p className="text-slate-400 text-sm">
+                            {health.message}
+                        </p>
+                    </div>
+                )}
+            </div>
+        </main>
+    );
 }
 
-export default App
+function NotFound() {
+    return (
+        <div className="min-h-screen flex items-center justify-center">
+            <h1 className="text-3xl font-bold">
+                404 - Page Not Found
+            </h1>
+        </div>
+    );
+}
+
+function App() {
+    return (
+        <BrowserRouter>
+            <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="*" element={<NotFound />} />
+            </Routes>
+        </BrowserRouter>
+    );
+}
+
+export default App;

@@ -1,14 +1,16 @@
-const mongoose = require('Mongoose');
+const mongoose = require('mongoose');
 
 const connectDB = async () => {
     try {
-        const conn = await mongoose.connect(process.env.MONGO_URI || process.env.MONGODB_URI);
-        console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
+        const conn = await mongoose.connect(process.env.MONGO_URI);
+
+        console.log(`MongoDB Connected: ${conn.connection.host}`);
+
+        return conn;
     } catch (error) {
-        console.error(`❌ Mongoose Connection Error: ${error.message}`);
-        throw error; // Passes the error up to server.js safely
+        console.error('MongoDB Connection Error:', error.message);
+        throw error;
     }
 };
 
-// 🛠️ THIS LINE IS THE CRUCIAL FIX:
-module.exports = { connectDB };
+module.exports = connectDB;
