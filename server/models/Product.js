@@ -1,7 +1,67 @@
 const mongoose = require('mongoose');
 
+const compatibilitySchema = new mongoose.Schema(
+    {
+        componentType: {
+            type: String,
+            enum: [
+                'cpu',
+                'motherboard',
+                'ram',
+                'gpu',
+                'storage',
+                'psu',
+                'case',
+                'cooler',
+            ],
+        },
+
+        socket: {
+            type: String,
+            trim: true,
+        },
+
+        ramType: {
+            type: String,
+            trim: true,
+        },
+        capacity: {
+            type: Number,
+            min: 0,
+        },
+
+        wattage: {
+            type: Number,
+            min: 0,
+        },
+
+        recommendedPsuWattage: {
+            type: Number,
+            min: 0,
+        },
+
+        interface: {
+            type: String,
+            trim: true,
+        },
+        supportedStorageInterfaces: {
+            type: [String],
+            default: [],
+        },
+        maxRamCapacity: {
+            type: Number,
+            min: 0,
+        },
+    },
+    { _id: false }
+);
+
 const productSchema = new mongoose.Schema(
     {
+        compatibility: {
+            type: compatibilitySchema,
+            default: () => ({}),
+        },
         name: {
             type: String,
             required: true,

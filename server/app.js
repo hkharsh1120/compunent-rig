@@ -8,6 +8,7 @@ const notFoundMiddleware = require('./middleware/notFoundMiddleware');
 const errorMiddleware = require('./middleware/errorMiddleware');
 const adminRequestRoutes = require('./routes/adminRequestRoutes');
 const adminCustomerRoutes = require('./routes/adminCustomerRoutes');
+const serviceRequestRoutes = require('./routes/serviceRequestRoutes');
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/admin/dashboard', adminDashboardRoutes);
 app.use('/api/admin/requests', adminRequestRoutes);
 app.use('/api/admin/customers', adminCustomerRoutes);
+app.use('/api/service-requests', serviceRequestRoutes);
 
 // 404 handler
 app.use(notFoundMiddleware);

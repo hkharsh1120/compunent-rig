@@ -20,6 +20,15 @@ const initialForm = {
     category: '',
     brand: '',
     specifications: '',
+    compatibilityComponentType: '',
+    compatibilitySocket: '',
+    compatibilityRamType: '',
+    compatibilityWattage: '',
+    compatibilityRecommendedPsuWattage: '',
+    compatibilityInterface: '',
+    supportedStorageInterfaces: [],
+maxRamCapacity: '',
+compatibilityCapacity: '',
     isFeatured: false,
     isActive: true,
 };
@@ -83,6 +92,14 @@ const AdminProducts = () => {
             [name]: type === 'checkbox' ? checked : value,
         }));
     };
+    const handleCompatibilityChange = (event) => {
+        const { name, value } = event.target;
+    
+        setForm((previous) => ({
+            ...previous,
+            [name]: value,
+        }));
+    };
 
     const resetForm = () => {
         setForm(initialForm);
@@ -107,6 +124,30 @@ const AdminProducts = () => {
             specifications: Object.entries(specifications)
                 .map(([key, value]) => `${key}: ${value}`)
                 .join('\n'),
+                compatibilityComponentType:
+                product.compatibility?.componentType || '',
+            
+            compatibilitySocket:
+                product.compatibility?.socket || '',
+            
+            compatibilityRamType:
+                product.compatibility?.ramType || '',
+            
+            compatibilityWattage:
+                product.compatibility?.wattage ?? '',
+            
+            compatibilityRecommendedPsuWattage:
+                product.compatibility?.recommendedPsuWattage ?? '',
+            
+            compatibilityInterface:
+                product.compatibility?.interface || '',
+                supportedStorageInterfaces:
+    product.compatibility?.supportedStorageInterfaces || [],
+
+maxRamCapacity:
+    product.compatibility?.maxRamCapacity ?? '',
+    compatibilityCapacity:
+    product.compatibility?.capacity ?? '',
             isFeatured: Boolean(product.isFeatured),
             isActive: Boolean(product.isActive),
         });
@@ -155,6 +196,26 @@ const AdminProducts = () => {
                 category: form.category,
                 brand: form.brand,
                 specifications,
+                compatibility: {
+                    componentType: form.compatibilityComponentType || undefined,
+                    socket: form.compatibilitySocket.trim(),
+                    ramType: form.compatibilityRamType.trim(),
+                    wattage: form.compatibilityWattage
+                        ? Number(form.compatibilityWattage)
+                        : undefined,
+                    recommendedPsuWattage: form.compatibilityRecommendedPsuWattage
+                        ? Number(form.compatibilityRecommendedPsuWattage)
+                        : undefined,
+                    interface: form.compatibilityInterface.trim(),
+                    supportedStorageInterfaces: form.supportedStorageInterfaces,
+
+maxRamCapacity: form.maxRamCapacity
+    ? Number(form.maxRamCapacity)
+    : undefined,
+                },
+                capacity: form.compatibilityCapacity
+    ? Number(form.compatibilityCapacity)
+    : undefined,
                 isFeatured: form.isFeatured,
                 isActive: form.isActive,
             };
@@ -410,6 +471,67 @@ const AdminProducts = () => {
                             Enter one specification per line in Key: Value format.
                         </p>
                     </div>
+                    {/* Supported Storage Interfaces */}
+<div>
+    <label className="mb-2 block font-medium">
+        Supported Storage Interfaces
+    </label>
+
+    <div className="flex flex-wrap gap-4">
+        {['SATA', 'NVMe', 'PCIe'].map((item) => (
+            <label key={item} className="flex items-center gap-2">
+                <input
+                    type="checkbox"
+                    checked={form.supportedStorageInterfaces.includes(item)}
+                    onChange={(event) => {
+                        setForm((previous) => ({
+                            ...previous,
+                            supportedStorageInterfaces: event.target.checked
+                                ? [...previous.supportedStorageInterfaces, item]
+                                : previous.supportedStorageInterfaces.filter(
+                                    (value) => value !== item
+                                ),
+                        }));
+                    }}
+                />
+                {item}
+            </label>
+        ))}
+    </div>
+</div>
+
+{/* Maximum RAM Capacity */}
+<div>
+    <label className="mb-2 block font-medium">
+        Maximum RAM Capacity (GB)
+    </label>
+
+    <input
+        type="number"
+        min="1"
+        name="maxRamCapacity"
+        value={form.maxRamCapacity}
+        onChange={handleChange}
+        placeholder="Example: 128"
+        className="w-full rounded-lg border p-3"
+    />
+    {/* RAM Capacity */}
+<div>
+    <label className="mb-2 block font-medium">
+        RAM Capacity (GB)
+    </label>
+
+    <input
+        type="number"
+        min="1"
+        name="compatibilityCapacity"
+        value={form.compatibilityCapacity}
+        onChange={handleChange}
+        placeholder="Example: 16"
+        className="w-full rounded-lg border p-3"
+    />
+</div>
+</div>
 
                     <div>
                         <label className="mb-2 block text-sm font-medium">

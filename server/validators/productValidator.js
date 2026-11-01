@@ -5,6 +5,32 @@ const objectId = z.string().regex(
     'Invalid ID'
 );
 
+const compatibilitySchema = z.object({
+    componentType: z.enum([
+        'cpu',
+        'motherboard',
+        'ram',
+        'gpu',
+        'storage',
+        'psu',
+        'case',
+        'cooler'
+    ]).optional(),
+
+    socket: z.string().trim().max(50).optional(),
+    ramType: z.string().trim().max(30).optional(),
+    wattage: z.number().positive().optional(),
+    recommendedPsuWattage: z.number().positive().optional(),
+    interface: z.string().trim().max(50).optional(),
+
+    // New motherboard compatibility fields
+    supportedStorageInterfaces: z.array(
+        z.enum(['SATA', 'NVMe', 'PCIe'])
+    ).optional(),
+
+    maxRamCapacity: z.number().positive().optional(),
+    capacity: z.number().positive().optional(),
+}).strict();
 const productBody = z.object({
     name: z.string().trim().min(2).max(150),
 
@@ -33,6 +59,8 @@ const productBody = z.object({
         z.string(),
         z.string()
     ).optional(),
+
+    compatibility: compatibilitySchema.optional(),
 
     isFeatured: z.boolean().optional(),
 
