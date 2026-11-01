@@ -11,10 +11,7 @@ const {
 
 const validate = require('../middleware/validateMiddleware');
 
-const {
-    protect,
-    authorizeAdmin,
-} = require('../middleware/authMiddleware');
+const { protect, authorizeAdmin } = require('../middleware/authMiddleware');
 
 const {
     createCouponSchema,
@@ -27,7 +24,8 @@ const {
 
 const router = express.Router();
 
-// All coupon admin routes require authentication and admin role
+// Admin coupon management routes (require authentication + admin role)
+// All CRUD operations are admin-only
 router.use(protect, authorizeAdmin);
 
 // Coupon listing and search
@@ -44,9 +42,5 @@ router.patch('/:id', validate(updateCouponSchema), updateCoupon);
 
 // Coupon deletion
 router.delete('/:id', validate(deleteCouponSchema), deleteCoupon);
-
-// Coupon application (for customers - also accessible by authenticated users)
-// Note: applyCoupon is moved to auth middleware chain but we need both customer and admin access
-router.post('/apply', validate(applyCouponSchema), applyCoupon);
 
 module.exports = router;

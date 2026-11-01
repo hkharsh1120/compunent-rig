@@ -1,5 +1,10 @@
 const { z } = require('zod');
 
+const objectId = z.string().regex(
+    /^[a-f\d]{24}$/i,
+    'Invalid ID'
+);
+
 const orderSchema = z.object({
     body: z.object({
         items: z.array(

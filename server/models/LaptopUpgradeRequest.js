@@ -89,6 +89,8 @@ const laptopUpgradeRequestSchema = new mongoose.Schema(
 
 laptopUpgradeRequestSchema.index({ customer: 1, createdAt: -1 });
 laptopUpgradeRequestSchema.index({ status: 1, createdAt: -1 });
+laptopUpgradeRequestSchema.index({ customerName: 1, email: 1, createdAt: -1 });
+laptopUpgradeRequestSchema.index({ _id: 1 });
 
 module.exports = mongoose.model(
     'LaptopUpgradeRequest',

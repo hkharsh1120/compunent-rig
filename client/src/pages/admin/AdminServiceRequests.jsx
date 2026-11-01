@@ -1,13 +1,13 @@
-
-import { useEffect, useState } from 'react';
-
+import { useEffect, useState, useCallback } from 'react';
 import {
     getBuildRequests,
     getUpgradeRequests,
+    getStatusOptions,
     updateBuildRequest,
     updateUpgradeRequest,
 } from '../../services/adminRequestService';
 
+// Status options per request type
 const statusOptions = {
     build: [
         'pending',
@@ -28,28 +28,118 @@ const statusOptions = {
     ],
 };
 
+// Debounce hook
+const useDebounce = (value, delay) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+    const [isDebouncing, setIsDebouncing] = useState(false);
+
+    useEffect(() => {
+        setIsDebouncing(true);
+        const handler = setTimeout(() => {
+            setDebouncedValue(value);
+            setIsDebouncing(false);
+        }, delay);
+
+        return () => clearTimeout(handler);
+    }, [value, delay]);
+
+    return { debouncedValue, isDebouncing };
+};
+
 const AdminServiceRequests = () => {
     const [activeTab, setActiveTab] = useState('build');
     const [requests, setRequests] = useState([]);
+    const [pagination, setPagination] = useState({
+        page: 1,
+        limit: 20,
+        total: 0,
+        totalPages: 0,
+    });
+
+    const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
+
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [status, setStatus] = useState('pending');
     const [adminNotes, setAdminNotes] = useState('');
 
+    const [availableStatuses, setAvailableStatuses] = useState([]);
+
     const [loading, setLoading] = useState(true);
+    const [loadingStatuses, setLoadingStatuses] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
 
-    const loadRequests = async () => {
+    // Debounce search input to avoid excessive API calls
+    const { debouncedValue: debouncedSearch } = useDebounce(search, 300);
+
+    // Current page is stored in pagination state
+    const currentPage = pagination.page || 1;
+    const currentLimit = pagination.limit || 20;
+    const totalRequests = pagination.total || 0;
+    const totalPages = pagination.totalPages || 1;
+
+    const loadStatuses = useCallback(async () => {
+        setLoadingStatuses(true);
+        try {
+            const statuses = await getStatusOptions(activeTab);
+            setAvailableStatuses(statuses);
+        } catch (err) {
+            // Silently fail, use default status options
+        } finally {
+            setLoadingStatuses(false);
+        }
+    }, [activeTab]);
+
+    // Extract params based on current filter state
+    const buildParams = useCallback(() => {
+        const params = {
+            page: currentPage,
+            limit: currentLimit,
+        };
+
+        if (debouncedSearch) {
+            params.search = debouncedSearch;
+        }
+
+        if (statusFilter) {
+            params.status = statusFilter;
+        }
+
+        if (dateFrom) {
+            params.dateFrom = dateFrom;
+        }
+
+        if (dateTo) {
+            params.dateTo = dateTo;
+        }
+
+        return params;
+    }, [currentPage, currentLimit, debouncedSearch, statusFilter, dateFrom, dateTo]);
+
+    const loadRequests = useCallback(async () => {
         setLoading(true);
         setError('');
 
         try {
-            const data = activeTab === 'build'
-                ? await getBuildRequests()
-                : await getUpgradeRequests();
+            const params = buildParams();
 
-            setRequests(data);
+            const data = activeTab === 'build'
+                ? await getBuildRequests(params)
+                : await getUpgradeRequests(params);
+
+            // The service returns response.data.data which contains {requests, pagination}
+            const responseData = data;
+            setRequests(responseData.requests || []);
+            setPagination({
+                page: responseData.pagination?.page || 1,
+                limit: responseData.pagination?.limit || 20,
+                total: responseData.pagination?.total || 0,
+                totalPages: responseData.pagination?.totalPages || 1,
+            });
         } catch (err) {
             setError(
                 err.response?.data?.message ||
@@ -58,12 +148,34 @@ const AdminServiceRequests = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [buildParams, activeTab]);
 
+    // Load statuses when tab changes
     useEffect(() => {
-        setSelectedRequest(null);
+        loadStatuses();
+    }, [activeTab, loadStatuses]);
+
+    // Reset to first page when filters change
+    useEffect(() => {
+        if (debouncedSearch || statusFilter || dateFrom || dateTo) {
+            setPagination(prev => ({ ...prev, page: 1 }));
+        }
+    }, [debouncedSearch, statusFilter, dateFrom, dateTo]);
+
+    // Load requests when page or tab changes
+    useEffect(() => {
         loadRequests();
-    }, [activeTab]);
+    }, [loadRequests, activeTab]);
+
+    // Load requests when page changes (separate effect to handle pagination)
+    useEffect(() => {
+        // Page changes trigger loadRequests via buildParams dependency
+    }, [currentPage]);
+
+    const goToPage = (page) => {
+        if (page < 1 || page > totalPages || page === currentPage) return;
+        setPagination(prev => ({ ...prev, page }));
+    };
 
     const selectRequest = (request) => {
         setSelectedRequest(request);
@@ -95,7 +207,8 @@ const AdminServiceRequests = () => {
             setMessage('Service request updated successfully.');
             setSelectedRequest(null);
 
-            await loadRequests();
+            // Refresh list after update
+            loadRequests();
         } catch (err) {
             setError(
                 err.response?.data?.message ||
@@ -108,6 +221,13 @@ const AdminServiceRequests = () => {
 
     const formatDate = (date) =>
         new Date(date).toLocaleString('en-IN');
+
+    const clearFilters = () => {
+        setSearch('');
+        setStatusFilter('');
+        setDateFrom('');
+        setDateTo('');
+    };
 
     const customerFields = activeTab === 'build'
         ? [
@@ -123,6 +243,17 @@ const AdminServiceRequests = () => {
             ['Requirements', 'requirements'],
         ];
 
+    // Get status label with proper formatting
+    const getStatusLabel = (status) => {
+        return status.replaceAll('_', ' ');
+    };
+
+    // Get the current status options for the active tab
+    const currentStatusOptions = statusOptions[activeTab] || [];
+
+    // Calculate total pages for pagination display
+    const displayedTotalPages = Math.ceil(totalRequests / currentLimit);
+
     return (
         <div className="space-y-6">
             <div>
@@ -132,6 +263,66 @@ const AdminServiceRequests = () => {
                 <p className="mt-2 text-gray-600">
                     Manage custom PC builds and laptop upgrades.
                 </p>
+            </div>
+
+            {/* Search and Filters */}
+            <div className="rounded-xl bg-white p-5 shadow-sm">
+                <div className="mb-4 flex flex-wrap items-center gap-4">
+                    <input
+                        type="text"
+                        placeholder="Search by name, email, or enquiry ID..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="rounded-lg border p-3 w-72"
+                    />
+
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="rounded-lg border p-3"
+                    >
+                        <option value="">All Statuses</option>
+                        {currentStatusOptions.map((s) => (
+                            <option key={s} value={s}>
+                                {getStatusLabel(s)}
+                            </option>
+                        ))}
+                    </select>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                        <input
+                            type="date"
+                            value={dateFrom}
+                            onChange={(e) => setDateFrom(e.target.value)}
+                            className="rounded-lg border p-3"
+                            title="From Date"
+                        />
+                        <span className="self-center text-gray-500">to</span>
+                        <input
+                            type="date"
+                            value={dateTo}
+                            onChange={(e) => setDateTo(e.target.value)}
+                            className="rounded-lg border p-3"
+                            title="To Date"
+                        />
+                    </div>
+
+                    {(search || statusFilter || dateFrom || dateTo) && (
+                        <button
+                            onClick={clearFilters}
+                            className="rounded-lg border px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                        >
+                            Clear Filters
+                        </button>
+                    )}
+                </div>
+
+                {/* Result Summary */}
+                {!loading && (
+                    <div className="text-sm text-gray-600">
+                        Showing {requests.length} of {totalRequests} request{totalRequests !== 1 ? 's' : ''}
+                    </div>
+                )}
             </div>
 
             <div className="flex flex-wrap gap-3">
@@ -164,75 +355,113 @@ const AdminServiceRequests = () => {
                 </div>
             )}
 
-            {message && (
-                <div className="rounded-lg bg-green-100 p-4 text-green-700">
-                    {message}
-                </div>
-            )}
-
             <section className="rounded-xl bg-white p-5 shadow-sm">
                 <h2 className="mb-5 text-xl font-bold">
                     {activeTab === 'build'
                         ? 'Custom PC Build Enquiries'
-                        : 'Laptop Upgrade Enquiries'} ({requests.length})
+                        : 'Laptop Upgrade Enquiries'}
                 </h2>
 
                 {loading ? (
                     <p className="text-gray-500">Loading requests...</p>
-                ) : requests.length === 0 ? (
-                    <p className="text-gray-500">No requests received yet.</p>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead>
-                                <tr className="border-b bg-gray-50 text-gray-600">
-                                    <th className="p-3">Customer</th>
-                                    <th className="p-3">Phone</th>
-                                    <th className="p-3">Request</th>
-                                    <th className="p-3">Status</th>
-                                    <th className="p-3">Date</th>
-                                    <th className="p-3">Action</th>
-                                </tr>
-                            </thead>
+                    <>
+                        {requests.length === 0 ? (
+                            <p className="text-gray-500">No requests found.</p>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead>
+                                        <tr className="border-b bg-gray-50 text-gray-600">
+                                            <th className="p-3">Customer</th>
+                                            <th className="p-3">Email</th>
+                                            <th className="p-3">Phone</th>
+                                            <th className="p-3">Request</th>
+                                            <th className="p-3">Status</th>
+                                            <th className="p-3">Date</th>
+                                            <th className="p-3">Action</th>
+                                        </tr>
+                                    </thead>
 
-                            <tbody>
-                                {requests.map((request) => (
-                                    <tr key={request._id} className="border-b">
-                                        <td className="p-3 font-medium">
-                                            {request.customerName}
-                                        </td>
+                                    <tbody>
+                                        {requests.map((request) => (
+                                            <tr key={request._id} className="border-b">
+                                                <td className="p-3 font-medium">
+                                                    {request.customerName}
+                                                </td>
 
-                                        <td className="p-3">
-                                            {request.phone}
-                                        </td>
+                                                <td className="p-3">
+                                                    {request.email}
+                                                </td>
 
-                                        <td className="p-3">
-                                            {activeTab === 'build'
-                                                ? request.purpose
-                                                : `${request.laptopBrand || ''} ${request.laptopModel || ''}`}
-                                        </td>
+                                                <td className="p-3">
+                                                    {request.phone}
+                                                </td>
 
-                                        <td className="p-3 capitalize">
-                                            {request.status.replaceAll('_', ' ')}
-                                        </td>
+                                                <td className="p-3">
+                                                    {activeTab === 'build'
+                                                        ? request.purpose
+                                                        : `${request.laptopBrand || ''} ${request.laptopModel || ''}`}
+                                                </td>
 
-                                        <td className="p-3">
-                                            {formatDate(request.createdAt)}
-                                        </td>
+                                                <td className="p-3 capitalize">
+                                                    <span className={`rounded-full px-2 py-1 text-xs font-medium ${
+                                                        request.status === 'pending'
+                                                            ? 'bg-yellow-100 text-yellow-800'
+                                                            : request.status === 'completed'
+                                                                ? 'bg-green-100 text-green-800'
+                                                                : request.status === 'cancelled'
+                                                                    ? 'bg-red-100 text-red-800'
+                                                                    : 'bg-blue-100 text-blue-800'
+                                                        }`}>
+                                                        {getStatusLabel(request.status)}
+                                                    </span>
+                                                </td>
 
-                                        <td className="p-3">
-                                            <button
-                                                onClick={() => selectRequest(request)}
-                                                className="font-medium text-blue-600 hover:underline"
-                                            >
-                                                Manage
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                                <td className="p-3">
+                                                    {formatDate(request.createdAt)}
+                                                </td>
+
+                                                <td className="p-3">
+                                                    <button
+                                                        onClick={() => selectRequest(request)}
+                                                        className="font-medium text-blue-600 hover:underline"
+                                                    >
+                                                        Manage
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {/* Pagination Controls */}
+                        {totalPages > 1 && (
+                            <div className="mt-6 flex items-center justify-between">
+                                <button
+                                    onClick={() => goToPage(currentPage - 1)}
+                                    disabled={currentPage === 1 || loading}
+                                    className="rounded-lg border px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Previous
+                                </button>
+
+                                <span className="text-sm text-gray-600">
+                                    Page {currentPage} of {totalPages}
+                                </span>
+
+                                <button
+                                    onClick={() => goToPage(currentPage + 1)}
+                                    disabled={currentPage === totalPages || loading}
+                                    className="rounded-lg border px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        )}
+                    </>
                 )}
             </section>
 
@@ -280,6 +509,15 @@ const AdminServiceRequests = () => {
                             </p>
                         </div>
 
+                        {selectedRequest.updatedAt && selectedRequest.updatedAt !== selectedRequest.createdAt && (
+                            <div>
+                                <p className="text-sm text-gray-500">Updated</p>
+                                <p className="font-medium text-gray-600">
+                                    {formatDate(selectedRequest.updatedAt)}
+                                </p>
+                            </div>
+                        )}
+
                         {customerFields.map(([label, field]) => (
                             <div key={field} className="md:col-span-2">
                                 <p className="text-sm text-gray-500">{label}</p>
@@ -298,12 +536,12 @@ const AdminServiceRequests = () => {
 
                             <select
                                 value={status}
-                                onChange={(event) => setStatus(event.target.value)}
-                                className="w-full rounded-lg border p-3 md:w-96"
+                                onChange={(e) => setStatus(e.target.value)}
+                                className="w-full rounded-lg border p-3"
                             >
-                                {statusOptions[activeTab].map((option) => (
+                                {currentStatusOptions.map((option) => (
                                     <option key={option} value={option}>
-                                        {option.replaceAll('_', ' ')}
+                                        {getStatusLabel(option)}
                                     </option>
                                 ))}
                             </select>
@@ -316,12 +554,15 @@ const AdminServiceRequests = () => {
 
                             <textarea
                                 value={adminNotes}
-                                onChange={(event) => setAdminNotes(event.target.value)}
+                                onChange={(e) => setAdminNotes(e.target.value)}
                                 rows="5"
                                 maxLength={5000}
                                 placeholder="Add internal notes about customer contact, compatibility, quotation, etc."
                                 className="w-full rounded-lg border p-3"
                             />
+                            <p className="mt-1 text-xs text-gray-500">
+                                {adminNotes.length}/5000 characters
+                            </p>
                         </div>
 
                         <button

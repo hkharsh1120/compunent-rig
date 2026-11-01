@@ -24,10 +24,12 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AdminLayout from './layouts/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminProducts from './pages/admin/AdminProducts';
+import AdminInventory from './pages/admin/AdminInventory';
 import AdminCatalog from './pages/admin/AdminCatalog';
 import AdminOrders from './pages/admin/AdminOrders';
 import AdminServiceRequests from './pages/admin/AdminServiceRequests';
 import AdminCustomers from './pages/admin/AdminCustomers';
+import AdminCoupons from './pages/admin/AdminCoupons';
 
 function NotFound() {
     return (
@@ -75,10 +77,12 @@ function App() {
                     <Route path="/admin" element={<AdminLayout />}>
                         <Route path="dashboard" element={<AdminDashboard />} />
                         <Route path="products" element={<AdminProducts />} />
+                        <Route path="inventory" element={<AdminInventory />} />
                         <Route path="catalog" element={<AdminCatalog />} />
                         <Route path="orders" element={<AdminOrders />} />
                         <Route path="service-requests" element={<AdminServiceRequests />} />
                         <Route path="customers" element={<AdminCustomers />} />
+                        <Route path="coupons" element={<AdminCoupons />} />
                     </Route>
                 </Route>
 

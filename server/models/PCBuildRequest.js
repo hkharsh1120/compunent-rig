@@ -80,6 +80,8 @@ const pcBuildRequestSchema = new mongoose.Schema(
 
 pcBuildRequestSchema.index({ customer: 1, createdAt: -1 });
 pcBuildRequestSchema.index({ status: 1, createdAt: -1 });
+pcBuildRequestSchema.index({ customerName: 1, email: 1, createdAt: -1 });
+pcBuildRequestSchema.index({ _id: 1 });
 
 module.exports = mongoose.model(
     'PCBuildRequest',

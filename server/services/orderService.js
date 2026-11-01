@@ -3,6 +3,8 @@ const crypto = require('crypto');
 
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const StockHistory = require('../models/StockHistory');
+const Coupon = require('../models/Coupon');
 const ApiError = require('../utils/ApiError');
 
 const createOrder = async (userId, data) => {
@@ -63,8 +65,96 @@ const createOrder = async (userId, data) => {
                 });
             }
 
+            // Calculate coupon discount
+            let discount = 0;
+            let couponInfo = {
+                code: '',
+                type: '',
+                value: 0,
+                maxDiscount: 0,
+            };
+
+            if (data.coupon?.code) {
+                const coupon = await Coupon.findOne({
+                    code: data.coupon.code,
+                }).session(session);
+
+                if (!coupon || !coupon.isActive) {
+                    throw new ApiError(400, 'Invalid or inactive coupon code');
+                }
+
+                // Check expiration
+                if (coupon.expiryDate && coupon.expiryDate < new Date()) {
+                    throw new ApiError(400, 'Coupon has expired');
+                }
+
+                // Check start date
+                if (coupon.startDate && coupon.startDate > new Date()) {
+                    throw new ApiError(400, 'Coupon is not yet active');
+                }
+
+                // Check min order amount
+                if (coupon.minOrderAmount > subtotal) {
+                    throw new ApiError(
+                        400,
+                        `Minimum order amount of ₹${coupon.minOrderAmount} required`
+                    );
+                }
+
+                // Check usage limit
+                if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) {
+                    throw new ApiError(400, 'Coupon usage limit reached');
+                }
+
+                // Check per-customer limit
+                if (coupon.perCustomerLimit) {
+                    const customerUsage = coupon.customerUsages.find(
+                        u => u.user.equals(userId)
+                    );
+                    if (customerUsage && customerUsage.count >= coupon.perCustomerLimit) {
+                        throw new ApiError(400, 'You have already used this coupon the maximum number of times');
+                    }
+                }
+
+                // Calculate discount
+                if (coupon.type === 'percentage') {
+                    discount = (subtotal * coupon.value) / 100;
+                    if (coupon.maxDiscount) {
+                        discount = Math.min(discount, coupon.maxDiscount);
+                    }
+                } else {
+                    discount = Math.min(coupon.value, subtotal);
+                }
+
+                // Increment usage count
+                coupon.usageCount += 1;
+                const customerUsage = coupon.customerUsages.find(
+                    u => u.user.equals(userId)
+                );
+                if (customerUsage) {
+                    customerUsage.count += 1;
+                } else {
+                    coupon.customerUsages.push({ user: userId, count: 1 });
+                }
+                await coupon.save({ session });
+
+                couponInfo = {
+                    code: coupon.code,
+                    type: coupon.type,
+                    value: coupon.value,
+                    maxDiscount: coupon.maxDiscount || 0,
+                };
+            }
+
+            const totalAmount = subtotal - discount;
+
             // Reduce stock only when sufficient stock remains.
+            // Also create stock history records within the same transaction
+            const stockHistoryEntries = [];
+
             for (const item of orderItems) {
+                const previousStock = products.find(p => p._id.equals(item.product)).stock;
+
                 const result = await Product.updateOne(
                     {
                         _id: item.product,
@@ -83,6 +173,18 @@ const createOrder = async (userId, data) => {
                         `Stock changed while placing order for ${item.name}. Please try again.`
                     );
                 }
+
+                // Queue stock history entry for this product
+                stockHistoryEntries.push({
+                    product: item.product,
+                    change: -item.quantity,
+                    type: 'order',
+                    reference: null, // Will be set after order creation
+                    previousStock,
+                    newStock: previousStock - item.quantity,
+                    reason: `Order ${data.customerDetails?.email || 'web'}`,
+                    changedBy: null,
+                });
             }
 
             const orderNumber = `CR-${Date.now()}-${crypto
@@ -100,12 +202,24 @@ const createOrder = async (userId, data) => {
                         email: data.customerDetails.email.toLowerCase(),
                     },
                     subtotal,
-                    totalAmount: subtotal,
+                    discount,
+                    totalAmount,
+                    coupon: couponInfo,
                     paymentMethod: data.paymentMethod,
                     notes: data.notes || '',
                 }],
                 { session }
             );
+
+            // Update history entries with order reference and insert into StockHistory collection
+            const orderHistoryEntries = stockHistoryEntries.map(entry => ({
+                ...entry,
+                reference: order.orderNumber,
+            }));
+
+            if (orderHistoryEntries.length > 0) {
+                await StockHistory.insertMany(orderHistoryEntries, { session });
+            }
 
             createdOrder = order;
         });
@@ -184,12 +298,72 @@ const updateOrderStatus = async (id, orderStatus) => {
                     throw new ApiError(400, 'Delivered orders cannot be cancelled');
                 }
 
+                // Restore coupon usage if coupon was applied
+                if (currentOrder.coupon?.code && currentOrder.coupon?.type) {
+                    const coupon = await Coupon.findOne({ code: currentOrder.coupon.code }).session(session);
+                    if (coupon) {
+                        coupon.usageCount = Math.max(0, coupon.usageCount - 1);
+                        const usageIndex = coupon.customerUsages.findIndex(
+                            u => currentOrder.user && u.user.equals(currentOrder.user)
+                        );
+                        if (usageIndex >= 0) {
+                            coupon.customerUsages[usageIndex].count = Math.max(0, coupon.customerUsages[usageIndex].count - 1);
+                            if (coupon.customerUsages[usageIndex].count === 0) {
+                                coupon.customerUsages.splice(usageIndex, 1);
+                            }
+                        }
+                        await coupon.save({ session });
+                    }
+                }
+
+                // Queue stock history entries for each product being restored
+                const stockHistoryEntries = [];
+                const updatedStocks = [];
+
+                for (const item of currentOrder.items) {
+                    const result = await Product.findOne(
+                        { _id: item.product },
+                        { stock: 1 },
+                        { session }
+                    );
+
+                    if (result) {
+                        const previousStock = result.stock;
+                        const newStock = result.stock + item.quantity;
+                        updatedStocks.push({
+                            product: item.product,
+                            previousStock,
+                            newStock,
+                            quantity: item.quantity,
+                        });
+                    }
+                }
+
+                // Restore stock
                 for (const item of currentOrder.items) {
                     await Product.updateOne(
                         { _id: item.product },
                         { $inc: { stock: item.quantity } },
                         { session }
                     );
+                }
+
+                // Create stock history entries for restored stock
+                for (const stockInfo of updatedStocks) {
+                    stockHistoryEntries.push({
+                        product: stockInfo.product,
+                        change: stockInfo.quantity,
+                        type: 'return',
+                        reference: currentOrder.orderNumber,
+                        previousStock: stockInfo.previousStock,
+                        newStock: stockInfo.newStock,
+                        reason: `Order cancellation: ${currentOrder.orderNumber}`,
+                        changedBy: null,
+                    });
+                }
+
+                if (stockHistoryEntries.length > 0) {
+                    await StockHistory.insertMany(stockHistoryEntries, { session });
                 }
 
                 currentOrder.orderStatus = 'cancelled';
