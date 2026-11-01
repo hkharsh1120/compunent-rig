@@ -137,12 +137,12 @@ const Cart = () => {
                                 confirmed when you submit your order.
                             </p>
 
-                            <button
-                                disabled
-                                className="mt-6 w-full cursor-not-allowed rounded-lg bg-blue-600 py-3 font-semibold opacity-50"
-                            >
-                                Checkout — Coming Soon
-                            </button>
+                            <Link
+    to="/checkout"
+    className="mt-6 block w-full rounded-lg bg-blue-600 py-3 text-center font-semibold hover:bg-blue-700"
+>
+    Proceed to Checkout
+</Link>
 
                             <Link
                                 to="/products"

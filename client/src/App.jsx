@@ -11,6 +11,17 @@ import Account from './pages/Account';
 import Products from './pages/Products';
 import ProductDetails from './pages/ProductDetails';
 import Cart from './pages/Cart';
+import Checkout from './pages/Checkout';
+import OrderSuccess from './pages/OrderSuccess';
+import MyOrders from './pages/MyOrders';
+import OrderDetails from './pages/OrderDetails';
+import AdminLayout from './layouts/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminProducts from './pages/admin/AdminProducts';
+import AdminCatalog from './pages/admin/AdminCatalog';
+import AdminOrders from './pages/admin/AdminOrders';
+import AdminServiceRequests from './pages/admin/AdminServiceRequests';
+import AdminCustomers from './pages/admin/AdminCustomers';
 
 function Home() {
     const [health, setHealth] = useState(null);
@@ -112,6 +123,23 @@ function App() {
     <Route path="/products" element={<Products />} />
     <Route path="/products/:slug" element={<ProductDetails />} />
     <Route path="/cart" element={<Cart />} />
+</Route>
+<Route element={<ProtectedRoute />}>
+    <Route path="/checkout" element={<Checkout />} />
+    <Route path="/order-success" element={<OrderSuccess />} />
+</Route>
+<Route path="/account/orders" element={<MyOrders />} />
+<Route path="/account/orders/:id" element={<OrderDetails />} />
+<Route element={<ProtectedRoute adminOnly />}>
+    <Route path="/admin" element={<AdminLayout />}>
+        <Route path="dashboard" element={<AdminDashboard />} />
+        <Route path="products" element={<AdminProducts />} />
+        <Route path="catalog" element={<AdminCatalog />} />
+        <Route path="orders" element={<AdminOrders />} />
+        <Route path="service-requests" element={<AdminServiceRequests />} />
+        <Route path="customers" element={<AdminCustomers />} />
+    </Route>
+    
 </Route>
         </Routes>
     );

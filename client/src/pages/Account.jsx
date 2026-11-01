@@ -12,6 +12,12 @@ const Account = () => {
                 <h1 className="mb-6 text-3xl font-bold">
                     My Account
                 </h1>
+                <Link
+    to="/account/orders"
+    className="rounded-lg bg-gray-800 px-4 py-2 text-white hover:bg-gray-700"
+>
+    My Orders
+</Link>
 
                 <div className="space-y-4">
                     <div>
