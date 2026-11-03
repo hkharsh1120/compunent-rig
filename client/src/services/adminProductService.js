@@ -1,22 +1,22 @@
 import api from './api';
 
 export const getAdminProducts = async (params = {}) => {
-    const response = await api.get('/products/admin/all', { params });
+    const response = await api.get('/api/products/admin/all', { params });
     return response.data.data;
 };
 
 export const createProduct = async (productData) => {
-    const response = await api.post('/products', productData);
+    const response = await api.post('/api/products', productData);
     return response.data.data;
 };
 
 export const updateProduct = async (id, productData) => {
-    const response = await api.patch(`/products/${id}`, productData);
+    const response = await api.patch(`/api/products/${id}`, productData);
     return response.data.data;
 };
 
 export const deactivateProduct = async (id) => {
-    const response = await api.delete(`/products/${id}`);
+    const response = await api.delete(`/api/products/${id}`);
     return response.data;
 };
 
@@ -28,7 +28,7 @@ export const uploadProductImages = async (id, files) => {
     });
 
     const response = await api.post(
-        `/products/${id}/images`,
+        `/api/products/${id}/images`,
         formData
     );
 
@@ -37,7 +37,7 @@ export const uploadProductImages = async (id, files) => {
 
 export const deleteProductImage = async (productId, imageId) => {
     const response = await api.delete(
-        `/products/${productId}/images/${imageId}`
+        `/api/products/${productId}/images/${imageId}`
     );
 
     return response.data;

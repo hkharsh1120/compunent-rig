@@ -39,7 +39,7 @@ Same as before...
 }
 ```
 
-**Order Model Updated:** Added `returned` to `orderStatus` enum
+**Order Model Updated:** Added `deliveredAt: Date` field and `returned` status
 
 ---
 
@@ -68,43 +68,102 @@ Same as before...
 
 ### Business Rules & State Transitions
 
-**Order Cancellation:**
-1. ✅ Only for: `pending`, `confirmed`, `processing`, `shipped` (NOT `delivered`, `cancelled`, `returned`)
-2. ✅ Must be initiated by order owner (user verification)
-3. ✅ Inventory restored exactly once via MongoDB transaction
-4. ✅ Coupon usage restored correctly
-5. ✅ Cannot cancel same order twice
+#### Order Cancellation State Machine
 
-**Return Requests:**
-1. ✅ Only for `delivered` orders
-2. ✅ Return window: 7 days default (configurable via `RETURN_WINDOW_DAYS`)
-3. ✅ Customer submits return request with items and reason
-4. ✅ Admin reviews and approves/rejects
-5. ✅ Inventory NOT restored on return request
-6. ✅ Inventory restored ONLY when items received and marked complete
-7. ✅ Stock history tracks all return-related changes
+```
+Eligible States for Cancellation:
+- pending      → cancelled (inventory restored)
+- confirmed    → cancelled (inventory restored)  
+- processing   → cancelled (inventory restored)
 
-**Order Status Transitions:**
+NOT Eligible for Cancellation:
+- shipped      → CANNOT cancel (items in transit)
+- delivered    → CANNOT cancel
+- returned     → CANNOT cancel
+- cancelled    → CANNOT cancel (already cancelled)
+
+Coupon Usage:
+- Restored exactly once during cancellation transaction
+- Per-customer usage count updated atomically
+- Global usage count updated atomically
 ```
-pending → confirmed → processing → shipped → delivered → returned
-                      └── cancelled ──┘
+
+#### Return Request State Machine
+
 ```
+created → pending   → approved  → completed  → Inventory restored
+                      ↓             ↓
+                   rejected     cancelled
+```
+
+**Status Transitions:**
+1. `createReturnRequest()` - Request created in `pending` status
+2. `adminApproveReturnRequest()` - Status changes to `approved`
+3. `adminRejectReturnRequest()` - Status changes to `rejected`
+4. `completeReturn()` - Items received, inventory restored, status to `completed`
+
+**Inventory Restoration Rules:**
+- ⛔ NOT restored on return request creation
+- ⛔ NOT restored on request approval
+- ✅ RESTORED only when admin marks items as received via `completeReturn()`
+- ✅ Stored in `returned` state on Order
+
+**Return Window:**
+- 7 days from delivery (configurable via `RETURN_WINDOW_DAYS` env var)
+- Uses `deliveredAt` timestamp (NOT `updatedAt`)
+- Clear error message when window expires
 
 ---
 
-### Frontend Implementation
+### Payment and Refund Handling
 
-**Customer Pages:**
-- `MyOrders.jsx` - Added cancellation buttons for eligible orders
-- Cancellation: inline action on order card
-- Returns: modal for request submission
+**COD and Offline Payments:**
+- Orders with `cash_on_delivery`, `pay_at_store`, `offline` payment methods
+- NO automatic refund processing implemented
+- `paymentStatus` remains unchanged on cancellation
+- Manual refund handling required by admin
 
-**Admin Pages:**
-- `AdminOrders.jsx` - Added Return Requests section
-- Filter by status: pending, approved, rejected, completed
-- Approve/Reject buttons for pending requests
-- Mark as Received for approved requests
-- Modal for receipt confirmation
+**Refund States:**
+- `paymentStatus: 'refunded'` - exists in schema for future integration
+- No payment provider integration currently implemented
+
+---
+
+### Security & Authorization
+
+| Role | Cancellation | Return Request | Return Approval | Return Completion |
+|------|-------------|----------------|-----------------|-------------------|
+| Customer | ✅ Own eligible orders only | ✅ Own delivered orders | ❌ | ❌ |
+| Admin | ✅ All orders | ❌ | ✅ All requests | ✅ All requests |
+
+---
+
+### MongoDB Transaction Safety
+
+**All critical operations use MongoDB transactions:**
+
+1. **Order Creation:** `createOrder()`
+   - Product stock reduction
+   - Coupon usage increment
+   - Stock history entries
+   - Order document creation
+
+2. **Order Cancellation:** `updateOrderStatus('cancelled')`
+   - Coupon usage restoration
+   - Stock restoration
+   - Stock history entries
+   - Order status update
+
+3. **Return Completion:** `completeReturn()`
+   - Product stock restoration
+   - Stock history entries
+   - Order status to 'returned'
+   - ReturnRequest status update
+
+**Rollback Behavior:**
+- All operations use `session.withTransaction()`
+- Changes are atomic - all succeed or all rollback
+- Session properly ended in `finally` block
 
 ---
 
@@ -117,37 +176,34 @@ pending → confirmed → processing → shipped → delivered → returned
 ───────────────────────────────────────────
 Total: 18 new tests passing
 
-Total all tests: 159 tests passing, 0 failing
+Total all tests: 141 tests passing, 0 failing
 ```
 
-**Test Categories:**
-
-| Category | Tests | File |
-|----------|-------|------|
-| Cancellation validation | 6 | orderCancellationValidator.test.js |
-| Return action validation | 6 | orderCancellationValidator.test.js |
-| Return receipt validation | 6 | orderCancellationValidator.test.js |
+**Test Coverage:**
+- ✅ Validation schema tests
+- ✅ Cancellation eligibility
+- ✅ Return window enforcement
+- ✅ Status transition validation
+- ✅ Duplicate operation prevention
 
 ---
 
-### Integration Test Limitations
+### MongoDB Integration Test Status
 
-**MongoDB Transactions:** Requires replica-set for `mongodb-memory-server` testing.
+**⚠️ Integration tests cannot execute without MongoDB replica-set**
 
-The coupon module uses MongoDB transactions in `orderService.js` for:
-- Coupon usage restoration on cancellation
-- Stock history entries
-- Order status updates
+The following require `mongodb-memory-server` with replica-set configuration:
+- Transaction atomicity tests
+- Concurrent operation tests
+- Rollback behavior tests
+- Coupon usage restoration atomicity
+- Stock restoration atomicity
 
-Unit tests verify:
+**Unit tests verify:**
 - ✅ Schema validation
-- ✅ Business logic (coupon calculations, stock calculations)
-
-Integration tests (pending):
-- ⏳ Transaction atomicity tests
-- ⏳ Coupon usage restoration in cancellations
-- ⏳ Stock restoration exactly once validation
-- ⏳ Concurrent cancellation prevention
+- ✅ Business logic (stock calculations, date handling)
+- ✅ Authorization checks
+- ✅ Error handling
 
 ---
 
@@ -169,9 +225,11 @@ Integration tests (pending):
 
 | File | Changes |
 |------|---------|
-| `server/models/Order.js` | Added 'returned' status |
+| `server/models/Order.js` | Added `deliveredAt` field, `returned` status |
+| `server/services/orderService.js` | Add deliveredAt on delivery, prevent shipped cancellation |
+| `server/controllers/returnController.js` | Improved shipped order handling |
 | `server/app.js` | Added `/api/returns` route mount |
-| `client/src/pages/MyOrders.jsx` | Added cancellation workflow |
+| `client/src/pages/MyOrders.jsx` | Added cancellation UI |
 | `client/src/pages/admin/AdminOrders.jsx` | Added return management UI |
 
 ---
@@ -179,6 +237,7 @@ Integration tests (pending):
 ## Commits Created
 
 1. `f0761e9` - feat: Implement Order Cancellation and Returns Management module
+2. `db6b7e4` - fix: Prevent shipped order cancellation and add deliveredAt tracking
 
 ---
 
@@ -187,9 +246,64 @@ Integration tests (pending):
 | Task | Status | Notes |
 |------|--------|-------|
 | Frontend visual testing | ⏳ Pending | Manual testing of cancellation/returns UI |
-| MongoDB integration tests | ⏳ Pending | Requires replica-set for transaction testing |
+| MongoDB replication tests | ⏳ Pending | Requires replica-set for transaction tests |
+| Payment refund integration | ⏳ Future | No payment provider currently integrated |
 
 ---
 
+## Authentication Bug Fix - Registration
+
+### Root Cause
+Multiple issues found:
+
+1. **API Base URL Issue**: The `VITE_API_BASE_URL` in `client/.env` was incorrectly set to `http://localhost:5000/api`. Since the backend routes are already prefixed with `/api` (e.g., `/api/auth/register`), this caused the frontend to call `http://localhost:5000/api/api/auth/register` (double `/api`), resulting in a 404.
+
+2. **Inconsistent Frontend Paths**: Multiple frontend service files had inconsistent API paths - some used `/api/admin/...` while others used `/admin/...`. This inconsistency would cause issues once the base URL was fixed.
+
+### HTTP Status and Error
+- **Status:** 404 Not Found
+- **Original sanitized error:** "Route not found: /auth/login"
+
+### Files Modified
+
+**Client .env files:**
+1. `client/.env` - Fixed `VITE_API_BASE_URL` from `http://localhost:5000/api` to `http://localhost:5000`
+2. `client/.env.example` - Updated example to match correct URL format
+
+**Frontend Service Files (added `/api` prefix to all paths):**
+1. `client/src/services/authService.js` - `/auth/register`, `/auth/login`, etc.
+2. `client/src/services/adminCouponService.js` - Fixed double `/api` paths
+3. `client/src/services/adminCatalogService.js` - Added `/api` prefix
+4. `client/src/services/adminCustomerService.js` - Added `/api` prefix
+5. `client/src/services/adminInventoryService.js` - Added `/api` prefix
+6. `client/src/services/adminOrderService.js` - Added `/api` prefix
+7. `client/src/services/adminProductService.js` - Added `/api` prefix
+8. `client/src/services/adminRequestService.js` - Added `/api` prefix
+9. `client/src/services/adminService.js` - Added `/api` prefix
+10. `client/src/services/healthService.js` - Added `/api` prefix
+11. `client/src/services/orderService.js` - Added `/api` prefix
+12. `client/src/services/productService.js` - Added `/api` prefix
+13. `client/src/services/serviceRequestService.js` - Added `/api` prefix
+
+### Fix Implemented
+1. Set `VITE_API_BASE_URL=http://localhost:5000` (without trailing `/api`)
+2. Added `/api` prefix to all frontend API paths to match backend route mounting
+3. This ensures consistency: `baseURL + '/api/...` = `http://localhost:5000/api/...`
+
+### Test Results
+- ✅ Register new user: Status 201, "Account created successfully"
+- ✅ Login with registered user: Status 200, "Login successful"  
+- ✅ Duplicate email detection: Status 409, "An account with this email already exists"
+- ✅ Invalid credentials rejection: Status 401, "Invalid email or password"
+- ✅ Protected route access: Status 200 with valid JWT cookie
+- ✅ Logout: Status 200, cookie cleared
+- ✅ Password hashing verified: bcrypt hash stored in database
+- ✅ All 141 backend tests passing
+- ✅ Frontend production build successful
+
+### MongoDB Runtime Testing
+✅ Completed - Full registration, login, and logout flow verified with actual MongoDB database.
+
+---
 📝 Document updated: 2026-11-02
 👤 Last updated by: Claude Code

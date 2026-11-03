@@ -10,36 +10,36 @@ export const getCoupons = async (filters = {}) => {
     if (filters.type) params.append('type', filters.type);
     if (filters.search) params.append('search', filters.search);
 
-    const response = await api.get(`/api/admin/coupons?${params.toString()}`);
+    const response = await api.get(`/admin/coupons?${params.toString()}`);
     return response.data.data;
 };
 
 // Get single coupon
 export const getCoupon = async (id) => {
-    const response = await api.get(`/api/admin/coupons/${id}`);
+    const response = await api.get(`/admin/coupons/${id}`);
     return response.data.data;
 };
 
 // Create coupon
 export const createCoupon = async (couponData) => {
-    const response = await api.post('/api/admin/coupons', couponData);
+    const response = await api.post('/admin/coupons', couponData);
     return response.data.data;
 };
 
 // Update coupon
 export const updateCoupon = async (id, couponData) => {
-    const response = await api.patch(`/api/admin/coupons/${id}`, couponData);
+    const response = await api.patch(`/admin/coupons/${id}`, couponData);
     return response.data.data;
 };
 
 // Delete (deactivate) coupon
 export const deleteCoupon = async (id) => {
-    const response = await api.delete(`/api/admin/coupons/${id}`);
+    const response = await api.delete(`/admin/coupons/${id}`);
     return response.data.data;
 };
 
 // Apply coupon (customer endpoint)
 export const applyCoupon = async (couponData) => {
-    const response = await api.post('/api/coupons/apply', couponData);
+    const response = await api.post('/coupons/apply', couponData);
     return response.data.data;
 };

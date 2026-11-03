@@ -2,17 +2,17 @@
 import api from './api';
 
 export const getAdminOrders = async (params = {}) => {
-    const response = await api.get('/orders/admin/all', { params });
+    const response = await api.get('/api/orders/admin/all', { params });
     return response.data.data;
 };
 
 export const getAdminOrderDetails = async (id) => {
-    const response = await api.get(`/orders/${id}`);
+    const response = await api.get(`/api/orders/${id}`);
     return response.data.data;
 };
 
 export const updateAdminOrderStatus = async (id, orderStatus) => {
-    const response = await api.patch(`/orders/admin/${id}/status`, {
+    const response = await api.patch(`/api/orders/admin/${id}/status`, {
         orderStatus,
     });
 
@@ -21,22 +21,22 @@ export const updateAdminOrderStatus = async (id, orderStatus) => {
 
 // Admin return management services
 export const adminGetReturnRequests = async (params = {}) => {
-    const response = await api.get('/returns/admin/returns', { params });
+    const response = await api.get('/api/returns/admin/returns', { params });
     return response.data.data;
 };
 
 export const adminApproveReturnRequest = async (id, notes) => {
-    const response = await api.patch(`/returns/admin/returns/${id}/approve`, { notes });
+    const response = await api.patch(`/api/returns/admin/returns/${id}/approve`, { notes });
     return response.data.data;
 };
 
 export const adminRejectReturnRequest = async (id, notes) => {
-    const response = await api.patch(`/returns/admin/returns/${id}/reject`, { notes });
+    const response = await api.patch(`/api/returns/admin/returns/${id}/reject`, { notes });
     return response.data.data;
 };
 
 export const adminCompleteReturn = async (id, itemsReceived, notes) => {
-    const response = await api.patch(`/returns/admin/returns/${id}/receive`, {
+    const response = await api.patch(`/api/returns/admin/returns/${id}/receive`, {
         itemsReceived,
         notes,
     });
