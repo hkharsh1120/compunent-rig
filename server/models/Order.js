@@ -165,6 +165,12 @@ const orderSchema = new mongoose.Schema(
             default: 'pending',
         },
 
+        // Track when order was delivered for return window calculation
+        deliveredAt: {
+            type: Date,
+            default: null,
+        },
+
         paymentMethod: {
             type: String,
             enum: ['cash_on_delivery', 'pay_at_store', 'offline'],

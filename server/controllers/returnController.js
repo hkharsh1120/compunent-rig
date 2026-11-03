@@ -14,7 +14,8 @@ const asyncHandler = require('../utils/asyncHandler');
 
 /**
  * Create a cancellation request for an order
- * Eligible orders: pending, confirmed, processing, shipped (not delivered/cancelled)
+ * Eligible orders: pending, confirmed, processing (NOT shipped/delivered/cancelled/returned)
+ * Shipped orders cannot be cancelled - items are in transit
  */
 const createCancellationRequest = asyncHandler(async (req, res) => {
     const { orderId } = req.params;
@@ -22,19 +23,15 @@ const createCancellationRequest = asyncHandler(async (req, res) => {
     const userId = req.user._id;
 
     // Find order and verify ownership
+    // NOTE: shipped orders are NOT eligible for customer cancellation
     const order = await Order.findOne({
         _id: orderId,
         user: userId,
-        orderStatus: { $in: ['pending', 'confirmed', 'processing', 'shipped'] },
+        orderStatus: { $in: ['pending', 'confirmed', 'processing'] },
     });
 
     if (!order) {
         throw new ApiError(404, 'Order not found or not eligible for cancellation');
-    }
-
-    // Check if already cancelled or delivered
-    if (order.orderStatus === 'cancelled' || order.orderStatus === 'delivered') {
-        throw new ApiError(400, `Cannot cancel a ${order.orderStatus} order`);
     }
 
     res.json({
@@ -54,7 +51,7 @@ const createCancellationRequest = asyncHandler(async (req, res) => {
 const getMyCancellationRequests = asyncHandler(async (req, res) => {
     const requests = await Order.find({
         user: req.user._id,
-        orderStatus: { $in: ['cancelled', 'pending', 'confirmed', 'processing', 'shipped'] },
+        orderStatus: { $in: ['cancelled', 'pending', 'confirmed', 'processing'] },
     }).select('orderNumber orderStatus totalAmount createdAt updatedAt')
       .sort({ createdAt: -1 });
 
@@ -76,7 +73,9 @@ const getOrderCancellation = asyncHandler(async (req, res) => {
         throw new ApiError(404, 'Order not found');
     }
 
-    const isEligible = ['pending', 'confirmed', 'processing', 'shipped'].includes(order.orderStatus);
+    // Shipped orders are not eligible for customer cancellation
+    // Only pending, confirmed, processing can be cancelled
+    const isEligible = ['pending', 'confirmed', 'processing'].includes(order.orderStatus);
 
     res.json({
         order: {
@@ -92,23 +91,22 @@ const getOrderCancellation = asyncHandler(async (req, res) => {
 
 /**
  * Cancel order (executes the cancellation with inventory restoration)
+ * ONLY for orders NOT yet shipped - shipped items are in transit
+ * Uses existing orderService cancellation logic
  */
 const cancelOrder = asyncHandler(async (req, res) => {
     const { orderId } = req.params;
 
     // Find order and verify ownership
+    // Shipped orders cannot be cancelled by customer
     const order = await Order.findOne({
         _id: orderId,
         user: req.user._id,
-        orderStatus: { $in: ['pending', 'confirmed', 'processing', 'shipped'] },
+        orderStatus: { $in: ['pending', 'confirmed', 'processing'] },
     });
 
     if (!order) {
         throw new ApiError(404, 'Order not found or not eligible for cancellation');
-    }
-
-    if (order.orderStatus === 'cancelled' || order.orderStatus === 'delivered') {
-        throw new ApiError(400, `Cannot cancel a ${order.orderStatus} order`);
     }
 
     // Use existing cancellation logic from orderService
@@ -132,6 +130,7 @@ const cancelOrder = asyncHandler(async (req, res) => {
 /**
  * Create a return request for an order
  * Only for delivered orders within configured return window
+ * Uses deliveredAt timestamp for accurate return window calculation
  */
 const createReturnRequest = asyncHandler(async (req, res) => {
     const { orderId } = req.validatedData.params;
@@ -139,6 +138,7 @@ const createReturnRequest = asyncHandler(async (req, res) => {
     const userId = req.user._id;
 
     // Find order and verify ownership
+    // Must be delivered to be returnable
     const order = await Order.findOne({
         _id: orderId,
         user: userId,
@@ -146,25 +146,27 @@ const createReturnRequest = asyncHandler(async (req, res) => {
     });
 
     if (!order) {
-        throw new ApiError(404, 'Order not found or not eligible for return');
+        throw new ApiError(404, 'Order not found or not eligible for return (only delivered orders can be returned)');
     }
 
-    // Check return window (7 days from delivery by default)
-    // Configurable via environment variable
+    // Check return window using deliveredAt timestamp
+    // Default: 7 days from delivery
     const returnWindowDays = parseInt(process.env.RETURN_WINDOW_DAYS || '7', 10);
-    const deliveryDate = order.updatedAt; // Use updated timestamp as proxy for delivery
+
+    // Use deliveredAt if available, otherwise fall back to createdAt + delivery marker
+    const deliveryDate = order.deliveredAt || order.updatedAt;
     const cutoffDate = new Date(deliveryDate);
     cutoffDate.setDate(cutoffDate.getDate() + returnWindowDays);
 
     if (new Date() > cutoffDate) {
-        throw new ApiError(400, `Return window of ${returnWindowDays} days has expired`);
+        throw new ApiError(400, `Return window of ${returnWindowDays} days has expired. Returns can only be requested within ${returnWindowDays} days of delivery.`);
     }
 
     // Verify items belong to this order
-    const orderItemIds = order.items.map(item => item.product.toString());
+    const orderItemProducts = order.items.map(item => item.product.toString());
     for (const item of items) {
-        if (!orderItemIds.includes(item.productId)) {
-            throw new ApiError(400, `Item ${item.productId} not in this order`);
+        if (!orderItemProducts.includes(item.productId)) {
+            throw new ApiError(400, `Item ${item.productId} not found in this order`);
         }
     }
 
@@ -189,7 +191,7 @@ const createReturnRequest = asyncHandler(async (req, res) => {
             _id: returnRequest._id,
             order: orderId,
             status: returnRequest.status,
-            items: returnItems.length,
+            itemsCount: returnItems.length,
             reason,
         },
     });
@@ -208,6 +210,7 @@ const getMyReturnRequests = asyncHandler(async (req, res) => {
 
 /**
  * Get specific return request (customer view)
+ * Only owner can view their own return requests
  */
 const getReturnRequest = asyncHandler(async (req, res) => {
     const { id } = req.params;
@@ -282,6 +285,7 @@ const adminApproveReturnRequest = asyncHandler(async (req, res) => {
         message: 'Return request approved. Customer will be notified.',
         returnRequest: {
             _id: request._id,
+            order: request.order,
             status: request.status,
         },
     });
@@ -321,7 +325,8 @@ const adminRejectReturnRequest = asyncHandler(async (req, res) => {
 
 /**
  * Admin: Mark returned items as received and complete return
- * This restores inventory for returned items
+ * This restores inventory for returned items ONLY when physically received
+ * CRITICAL: Inventory is NOT restored on approval, only on receipt
  */
 const completeReturn = asyncHandler(async (req, res) => {
     const { id } = req.params;
@@ -345,33 +350,36 @@ const completeReturn = asyncHandler(async (req, res) => {
                 throw new ApiError(404, 'Associated order not found');
             }
 
-            // Update item statuses
-            for (const itemReq of request.items) {
-                const receivedItem = itemsReceived.find(
-                    ri => ri.itemId === itemReq._id || ri.itemId?.toString() === itemReq._id?.toString() ||
-                          (itemReq.product && ri.itemId?.toString() === itemReq.product.toString())
-                );
-
-                if (receivedItem) {
-                    itemReq.status = receivedItem.inGoodCondition ? 'completed' : 'partial';
-                }
-            }
-
-            // Calculate quantities to restore
+            // Track if any stock was restored
             let totalQuantityRestored = 0;
 
+            // Process each item in the return request
             for (const itemReq of request.items) {
-                if (itemReq.status === 'completed' || itemReq.status === 'partial') {
+                // Find the matching received item
+                const receivedItem = itemsReceived.find(ri => {
+                    // Match by various possible formats
+                    return ri.itemId === itemReq.product?.toString() ||
+                           ri.itemId?.toString() === itemReq.product?.toString();
+                });
+
+                // Mark status based on actual receipt
+                if (receivedItem && receivedItem.inGoodCondition) {
+                    // Item received in good condition - restore inventory
                     const productId = itemReq.product;
                     const quantity = itemReq.quantity;
 
                     // Get current inventory
                     const product = await Product.findById(productId).session(session);
-                    if (!product) continue;
+                    if (!product) {
+                        // Product not found, skip this item
+                        itemReq.status = 'error';
+                        continue;
+                    }
 
                     const previousStock = product.stock;
-                    const newStock = previousStock + quantity;
-                    totalQuantityRestored += quantity;
+
+                    // Prevent double-restoration: check if this return already processed
+                    // This is ensured by the status transition from 'approved' to 'completed'
 
                     // Update product stock
                     await Product.updateOne(
@@ -379,6 +387,9 @@ const completeReturn = asyncHandler(async (req, res) => {
                         { $inc: { stock: quantity } },
                         { session }
                     );
+
+                    const newStock = previousStock + quantity;
+                    totalQuantityRestored += quantity;
 
                     // Create stock history entry for return
                     await StockHistory.create([{
@@ -391,6 +402,13 @@ const completeReturn = asyncHandler(async (req, res) => {
                         reason: `Return completed: ${request.reason || 'Customer return'}`,
                         changedBy: req.user._id,
                     }], { session });
+
+                    itemReq.status = 'completed';
+                } else if (receivedItem && !receivedItem.inGoodCondition) {
+                    itemReq.status = 'partial';
+                    // Partial returns don't restore full quantity
+                } else {
+                    itemReq.status = 'pending';
                 }
             }
 
@@ -400,10 +418,12 @@ const completeReturn = asyncHandler(async (req, res) => {
 
             // Update return request
             request.status = 'completed';
-            request.adminNotes = notes;
+            request.adminNotes = notes || '';
             request.processedBy = req.user._id;
             request.processedAt = new Date();
-            request.stockReturnReference = `Stock restored: ${totalQuantityRestored} items`;
+            request.stockReturnReference = totalQuantityRestored > 0
+                ? `Stock restored: ${totalQuantityRestored} items`
+                : 'No stock restored (partial/completed return)';
 
             await request.save({ session });
         });
@@ -413,6 +433,7 @@ const completeReturn = asyncHandler(async (req, res) => {
             returnRequest: {
                 _id: request._id,
                 status: request.status,
+                quantityRestored: totalQuantityRestored || 0,
             },
         });
     } finally {

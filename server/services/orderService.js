@@ -272,7 +272,7 @@ const updateOrderStatus = async (id, orderStatus) => {
         throw new ApiError(404, 'Order not found');
     }
 
-    if (['cancelled', 'delivered'].includes(order.orderStatus)) {
+    if (['cancelled', 'delivered', 'returned'].includes(order.orderStatus)) {
         throw new ApiError(
             400,
             `A ${order.orderStatus} order cannot be updated`
@@ -294,8 +294,12 @@ const updateOrderStatus = async (id, orderStatus) => {
                     throw new ApiError(400, 'Order is already cancelled');
                 }
 
-                if (currentOrder.orderStatus === 'delivered') {
-                    throw new ApiError(400, 'Delivered orders cannot be cancelled');
+                if (currentOrder.orderStatus === 'delivered' || currentOrder.orderStatus === 'returned') {
+                    throw new ApiError(400, 'Cannot cancel a delivered/returned order');
+                }
+
+                if (currentOrder.orderStatus === 'shipped') {
+                    throw new ApiError(400, 'Cannot cancel a shipped order - items are in transit');
                 }
 
                 // Restore coupon usage if coupon was applied
@@ -367,6 +371,8 @@ const updateOrderStatus = async (id, orderStatus) => {
                 }
 
                 currentOrder.orderStatus = 'cancelled';
+                // Update timestamps
+                currentOrder.updatedAt = new Date();
                 await currentOrder.save({ session });
             });
         } finally {
@@ -374,6 +380,14 @@ const updateOrderStatus = async (id, orderStatus) => {
         }
 
         return Order.findById(id);
+    }
+
+    // For delivered status, set deliveredAt timestamp
+    if (orderStatus === 'delivered') {
+        order.orderStatus = orderStatus;
+        order.deliveredAt = order.deliveredAt || new Date();
+        await order.save();
+        return order;
     }
 
     order.orderStatus = orderStatus;
