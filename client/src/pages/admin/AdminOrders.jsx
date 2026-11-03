@@ -1,9 +1,12 @@
-
 import { useEffect, useState } from 'react';
 import {
     getAdminOrders,
     getAdminOrderDetails,
     updateAdminOrderStatus,
+    adminGetReturnRequests,
+    adminApproveReturnRequest,
+    adminRejectReturnRequest,
+    adminCompleteReturn,
 } from '../../services/adminOrderService';
 
 const statuses = [
@@ -12,6 +15,15 @@ const statuses = [
     'processing',
     'shipped',
     'delivered',
+    'cancelled',
+    'returned',
+];
+
+const returnStatuses = [
+    'pending',
+    'approved',
+    'rejected',
+    'completed',
     'cancelled',
 ];
 
@@ -22,6 +34,15 @@ const statusColors = {
     shipped: 'bg-purple-100 text-purple-800',
     delivered: 'bg-green-100 text-green-800',
     cancelled: 'bg-red-100 text-red-800',
+    returned: 'bg-teal-100 text-teal-800',
+};
+
+const returnStatusColors = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    approved: 'bg-blue-100 text-blue-800',
+    rejected: 'bg-red-100 text-red-800',
+    completed: 'bg-green-100 text-green-800',
+    cancelled: 'bg-gray-100 text-gray-800',
 };
 
 const AdminOrders = () => {
@@ -32,6 +53,9 @@ const AdminOrders = () => {
     const [updating, setUpdating] = useState(false);
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
+    const [returnRequests, setReturnRequests] = useState([]);
+    const [returnFilter, setReturnFilter] = useState('pending');
+    const [selectedReturn, setSelectedReturn] = useState(null);
 
     const loadOrders = async () => {
         setLoading(true);
@@ -57,9 +81,29 @@ const AdminOrders = () => {
         }
     };
 
+    const loadReturnRequests = async () => {
+        try {
+            const result = await adminGetReturnRequests({ status: returnFilter });
+            setReturnRequests(
+                Array.isArray(result)
+                    ? result
+                    : result?.requests || []
+            );
+        } catch (err) {
+            setError(
+                err.response?.data?.message ||
+                'Unable to load return requests.'
+            );
+        }
+    };
+
     useEffect(() => {
         loadOrders();
     }, [statusFilter]);
+
+    useEffect(() => {
+        loadReturnRequests();
+    }, [returnFilter]);
 
     const openOrder = async (id) => {
         setError('');
@@ -107,12 +151,63 @@ const AdminOrders = () => {
         }
     };
 
+    // Return management handlers
+    const handleApproveReturn = async (id, notes) => {
+        setUpdating(true);
+        setError('');
+        setMessage('');
+
+        try {
+            await adminApproveReturnRequest(id, notes);
+            setMessage('Return request approved.');
+            await loadReturnRequests();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Unable to approve return.');
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const handleRejectReturn = async (id, notes) => {
+        setUpdating(true);
+        setError('');
+        setMessage('');
+
+        try {
+            await adminRejectReturnRequest(id, notes);
+            setMessage('Return request rejected.');
+            await loadReturnRequests();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Unable to reject return.');
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const handleCompleteReturn = async (id, itemsReceived, notes) => {
+        setUpdating(true);
+        setError('');
+        setMessage('');
+
+        try {
+            await adminCompleteReturn(id, itemsReceived, notes);
+            setMessage('Return completed. Inventory restored.');
+            await loadReturnRequests();
+            setSelectedReturn(null);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Unable to complete return.');
+        } finally {
+            setUpdating(false);
+        }
+    };
+
     if (loading && orders.length === 0) {
         return <p className="text-gray-600">Loading orders...</p>;
     }
 
     return (
         <div className="space-y-6">
+            {/* Orders Section */}
             <div>
                 <h1 className="text-3xl font-bold text-gray-900">
                     Order Management
@@ -134,6 +229,7 @@ const AdminOrders = () => {
                 </div>
             )}
 
+            {/* Orders Table */}
             <section className="rounded-xl bg-white p-5 shadow-sm">
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
                     <h2 className="text-xl font-bold">
@@ -222,6 +318,96 @@ const AdminOrders = () => {
                 )}
             </section>
 
+            {/* Return Requests Section */}
+            <section className="rounded-xl bg-white p-5 shadow-sm">
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
+                    <h2 className="text-xl font-bold">
+                        Return Requests ({returnRequests.length})
+                    </h2>
+
+                    <select
+                        value={returnFilter}
+                        onChange={(event) => setReturnFilter(event.target.value)}
+                        className="rounded-lg border p-3"
+                    >
+                        {returnStatuses.map((status) => (
+                            <option key={status} value={status}>
+                                {status.charAt(0).toUpperCase() + status.slice(1)}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                {returnRequests.length === 0 ? (
+                    <p className="text-gray-500">No return requests found.</p>
+                ) : (
+                    <div className="space-y-4">
+                        {returnRequests.map((request) => (
+                            <div key={request._id} className="rounded-lg border p-4">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <p className="font-medium">
+                                            Order: {request.order?.orderNumber}
+                                        </p>
+                                        <p className="text-sm text-gray-600">
+                                            Customer: {request.user?.name} ({request.user?.email})
+                                        </p>
+                                        <p className="text-sm text-gray-600">
+                                            Reason: {request.reason}
+                                        </p>
+                                        <p className="text-sm text-gray-600">
+                                            Items: {request.items?.length || 0}
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                            Requested: {new Date(request.createdAt).toLocaleString()}
+                                        </p>
+                                    </div>
+
+                                    <span className={`rounded-full px-3 py-1 text-xs font-medium ${
+                                        returnStatusColors[request.status] ||
+                                        'bg-gray-100 text-gray-700'
+                                    }`}>
+                                        {request.status}
+                                    </span>
+                                </div>
+
+                                {request.status === 'pending' && (
+                                    <div className="mt-3 flex gap-2">
+                                        <button
+                                            onClick={() => handleApproveReturn(request._id, 'Approved')}
+                                            disabled={updating}
+                                            className="rounded-lg bg-green-600 px-4 py-2 text-sm text-white"
+                                        >
+                                            Approve
+                                        </button>
+                                        <button
+                                            onClick={() => setSelectedReturn(request)}
+                                            disabled={updating}
+                                            className="rounded-lg bg-gray-600 px-4 py-2 text-sm text-white"
+                                        >
+                                            Reject
+                                        </button>
+                                    </div>
+                                )}
+
+                                {request.status === 'approved' && (
+                                    <div className="mt-3">
+                                        <button
+                                            onClick={() => setSelectedReturn(request)}
+                                            disabled={updating}
+                                            className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white"
+                                        >
+                                            Mark as Received
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </section>
+
+            {/* Order Details Modal/Details */}
             {selectedOrder && (
                 <section className="rounded-xl bg-white p-6 shadow-sm">
                     <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -230,12 +416,15 @@ const AdminOrders = () => {
                                 Order {selectedOrder.orderNumber}
                             </h2>
                             <p className="text-sm text-gray-500">
-                                {new Date(selectedOrder.createdAt).toLocaleString('en-IN')}
+                                {new Date(selectedOrder.createdAt).toLocaleString()}
                             </p>
                         </div>
 
                         <button
-                            onClick={() => setSelectedOrder(null)}
+                            onClick={() => {
+                                setSelectedOrder(null);
+                                setSelectedReturn(null);
+                            }}
                             className="rounded-lg border px-4 py-2"
                         >
                             Close
@@ -324,10 +513,7 @@ const AdminOrders = () => {
                                         orderStatus: event.target.value,
                                     })
                                 }
-                                disabled={
-                                    selectedOrder.orderStatus === 'cancelled' ||
-                                    selectedOrder.orderStatus === 'delivered'
-                                }
+                                disabled={updating}
                                 className="rounded-lg border p-3"
                             >
                                 {statuses.map((status) => (
@@ -351,6 +537,110 @@ const AdminOrders = () => {
                         </div>
                     </div>
                 </section>
+            )}
+
+            {/* Return Request Details Modal */}
+            {selectedReturn && selectedReturn.status === 'approved' && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+                        <h3 className="text-xl font-bold mb-4">
+                            Receive Returned Items
+                        </h3>
+
+                        <p className="mb-4">
+                            <strong>Order:</strong> {selectedReturn.order?.orderNumber}
+                        </p>
+
+                        <p className="mb-4">
+                            <strong>Reason:</strong> {selectedReturn.reason}
+                        </p>
+
+                        <h4 className="font-semibold mb-2">Items to Receive:</h4>
+                        <div className="border rounded-lg p-3 mb-4">
+                            {selectedReturn.items?.map((item, idx) => (
+                                <div key={idx} className="flex gap-3 items-center mb-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={true}
+                                        readOnly
+                                        className="h-4 w-4"
+                                    />
+                                    <div className="flex-1">
+                                        <p className="font-medium">{item.product?.name || 'Item'}</p>
+                                        <p className="text-sm text-gray-600">
+                                            Qty: {item.quantity} × {item.condition}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <textarea
+                            placeholder="Notes about receipt/inspection (optional)"
+                            value={selectedReturn.adminNotes || ''}
+                            onChange={(e) => setSelectedReturn({
+                                ...selectedReturn,
+                                adminNotes: e.target.value
+                            })}
+                            className="w-full rounded-lg border p-3 mb-4"
+                            rows={3}
+                        />
+
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setSelectedReturn(null)}
+                                className="rounded-lg border px-4 py-2"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleCompleteReturn(selectedReturn._id, [], selectedReturn.adminNotes || '')}
+                                disabled={updating}
+                                className="rounded-lg bg-green-600 px-4 py-2 text-white"
+                            >
+                                {updating ? 'Completing...' : 'Mark as Received'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Return Rejection Modal */}
+            {selectedReturn && selectedReturn.status === 'pending' && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                        <h3 className="text-xl font-bold mb-4">
+                            Reject Return Request
+                        </h3>
+
+                        <textarea
+                            placeholder="Reason for rejection"
+                            value={selectedReturn.adminNotes || ''}
+                            onChange={(e) => setSelectedReturn({
+                                ...selectedReturn,
+                                adminNotes: e.target.value
+                            })}
+                            className="w-full rounded-lg border p-3 mb-4"
+                            rows={3}
+                        />
+
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setSelectedReturn(null)}
+                                className="rounded-lg border px-4 py-2"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleRejectReturn(selectedReturn._id, selectedReturn.adminNotes || 'Not approved')}
+                                disabled={updating}
+                                className="rounded-lg bg-red-600 px-4 py-2 text-white"
+                            >
+                                {updating ? 'Rejecting...' : 'Reject Return'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

@@ -68,13 +68,15 @@ const AdminProducts = () => {
             const productList = extractList(productResult, 'products');
 
             setProducts(productList);
-            setCategories(extractList(categoryResult, 'categories'));
-            setBrands(extractList(brandResult, 'brands'));
+            setCategories(Array.isArray(categoryResult) ? categoryResult : extractList(categoryResult, 'categories') || []);
+            setBrands(Array.isArray(brandResult) ? brandResult : extractList(brandResult, 'brands') || []);
         } catch (err) {
-            setError(
-                err.response?.data?.message ||
-                'Unable to load product management data.'
-            );
+            const errors = err.response?.data?.errors || [];
+            const errorMessages = errors.length > 0
+                ? errors.map(e => `${e.field}: ${e.message}`).join('\n')
+                : err.response?.data?.message ||
+                'Unable to load product management data.';
+            setError(errorMessages);
         } finally {
             setLoading(false);
         }
@@ -141,13 +143,13 @@ const AdminProducts = () => {
             
             compatibilityInterface:
                 product.compatibility?.interface || '',
-                supportedStorageInterfaces:
-    product.compatibility?.supportedStorageInterfaces || [],
+            supportedStorageInterfaces:
+                product.compatibility?.supportedStorageInterfaces || [],
 
-maxRamCapacity:
-    product.compatibility?.maxRamCapacity ?? '',
-    compatibilityCapacity:
-    product.compatibility?.capacity ?? '',
+            maxRamCapacity:
+                product.compatibility?.maxRamCapacity ?? '',
+            compatibilityCapacity:
+                product.compatibility?.capacity ?? '',
             isFeatured: Boolean(product.isFeatured),
             isActive: Boolean(product.isActive),
         });
@@ -158,8 +160,36 @@ maxRamCapacity:
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
+    const fieldLabels = {
+        category: 'Category',
+        brand: 'Brand',
+        name: 'Product Name',
+        description: 'Description',
+        price: 'Price',
+        stock: 'Stock',
+        sku: 'SKU',
+        'compatibility.componentType': 'Component Type',
+        'compatibility.capacity': 'RAM Capacity',
+        'compatibility.socket': 'Socket',
+        'compatibility.ramType': 'RAM Type',
+        'compatibility.wattage': 'Wattage',
+        'compatibility.recommendedPsuWattage': 'Recommended PSU Wattage',
+        'compatibility.interface': 'Interface',
+        'compatibility.maxRamCapacity': 'Max RAM Capacity',
+    };
+
     const handleSubmit = async (event) => {
         event.preventDefault();
+
+        // Validate required selections
+        if (!form.category) {
+            setError('Please select a category.');
+            return;
+        }
+        if (!form.brand) {
+            setError('Please select a brand.');
+            return;
+        }
 
         setSaving(true);
         setError('');
@@ -198,24 +228,23 @@ maxRamCapacity:
                 specifications,
                 compatibility: {
                     componentType: form.compatibilityComponentType || undefined,
-                    socket: form.compatibilitySocket.trim(),
-                    ramType: form.compatibilityRamType.trim(),
+                    socket: form.compatibilitySocket.trim() || undefined,
+                    ramType: form.compatibilityRamType.trim() || undefined,
                     wattage: form.compatibilityWattage
                         ? Number(form.compatibilityWattage)
                         : undefined,
                     recommendedPsuWattage: form.compatibilityRecommendedPsuWattage
                         ? Number(form.compatibilityRecommendedPsuWattage)
                         : undefined,
-                    interface: form.compatibilityInterface.trim(),
-                    supportedStorageInterfaces: form.supportedStorageInterfaces,
-
-maxRamCapacity: form.maxRamCapacity
-    ? Number(form.maxRamCapacity)
-    : undefined,
+                    interface: form.compatibilityInterface.trim() || undefined,
+                    supportedStorageInterfaces: form.supportedStorageInterfaces || [],
+                    maxRamCapacity: form.maxRamCapacity
+                        ? Number(form.maxRamCapacity)
+                        : undefined,
+                    capacity: form.compatibilityCapacity
+                        ? Number(form.compatibilityCapacity)
+                        : undefined,
                 },
-                capacity: form.compatibilityCapacity
-    ? Number(form.compatibilityCapacity)
-    : undefined,
                 isFeatured: form.isFeatured,
                 isActive: form.isActive,
             };
@@ -230,7 +259,14 @@ maxRamCapacity: form.maxRamCapacity
 
             const productId = savedProduct?._id || editingId;
 
-            if (selectedImages.length > 0 && productId) {
+            if (!productId) {
+                setError('Failed to get product ID for image upload.');
+                return;
+            }
+
+            // Only attempt image upload if images were selected
+            // Use a check that verifies we have actual File objects
+            if (selectedImages.length > 0) {
                 await uploadProductImages(productId, selectedImages);
             }
 
@@ -243,10 +279,24 @@ maxRamCapacity: form.maxRamCapacity
             resetForm();
             await loadData();
         } catch (err) {
-            setError(
-                err.response?.data?.message ||
-                'Unable to save product.'
-            );
+            const errors = err.response?.data?.errors || [];
+            let errorMessage = err.response?.data?.message || 'Unable to save product.';
+
+            if (errors.length > 0) {
+                // Format field-specific errors
+                const fieldErrors = errors.map(e => {
+                    // Handle nested compatibility fields
+                    let fieldLabel = fieldLabels[e.field] || e.field;
+                    if (e.field.startsWith('compatibility.')) {
+                        const compatField = e.field.replace('compatibility.', '');
+                        fieldLabel = `Compatibility: ${fieldLabels[compatField] || compatField}`;
+                    }
+                    return `${fieldLabel}: ${e.message}`;
+                }).join('\n');
+                errorMessage = fieldErrors;
+            }
+
+            setError(errorMessage);
         } finally {
             setSaving(false);
         }

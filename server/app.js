@@ -33,13 +33,13 @@ app.use('/api/categories', require('./routes/categoryRoutes'));
 app.use('/api/brands', require('./routes/brandRoutes'));
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
-app.use('/api/admin/dashboard', adminDashboardRoutes);
 app.use('/api/admin/requests', adminRequestRoutes);
 app.use('/api/admin/customers', adminCustomerRoutes);
 app.use('/api/service-requests', serviceRequestRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/admin/coupons', couponRoutes);
 app.use('/api/coupons', couponCustomerRoutes);
+app.use('/api/returns', require('./routes/returnRoutes'));
 
 // 404 handler
 app.use(notFoundMiddleware);

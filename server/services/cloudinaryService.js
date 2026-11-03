@@ -11,8 +11,14 @@ const uploadImage = (buffer, folder = 'compunent-rig/products') => {
             },
             (error, result) => {
                 if (error) {
+                    // Log the original Cloudinary error for debugging (without secrets)
+                    console.error('Cloudinary upload error:', {
+                        message: error.message,
+                        http_code: error.http_code,
+                        name: error.name,
+                    });
                     return reject(
-                        new ApiError(502, 'Image upload failed')
+                        new ApiError(502, `Image upload failed: ${error.message}`)
                     );
                 }
 

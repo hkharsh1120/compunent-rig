@@ -29,12 +29,7 @@ export const uploadProductImages = async (id, files) => {
 
     const response = await api.post(
         `/products/${id}/images`,
-        formData,
-        {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        }
+        formData
     );
 
     return response.data.data;
