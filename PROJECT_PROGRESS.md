@@ -382,5 +382,33 @@ Two issues were found in order creation:
 ✅ Completed - Orders without coupon and with coupon both created successfully.
 
 ---
-📝 Document updated: 2026-11-02
+
+## Admin Order Details Bug Fix
+
+### Root Cause
+The `GET /api/orders/:id` route was missing the validation middleware. The controller `getOrderById` expected `req.validatedData.params.id`, but since the validation middleware was never called, `req.validatedData` was `undefined`, leading to the error: `Cannot read properties of undefined (reading 'params')`. 
+
+Additionally, the `orderSchema` in `orderValidator.js` had an empty `params` object, which wouldn't have captured the `id` even if the middleware was present.
+
+### HTTP Status and Error
+- **Status:** 500 Internal Server Error (originally)
+- **Error:** `TypeError: Cannot read properties of undefined (reading 'params')` at `server/controllers/orderController.js:26`
+
+### Files Modified
+1. `server/validators/orderValidator.js` - Added `id` validation to `params` in `orderSchema`
+2. `server/routes/orderRoutes.js` - Added `validate(orderSchema)` middleware to `GET /:id` route
+3. `server/tests/unit/orderValidator.test.js` - (NEW) Regression tests for order validation
+
+### Fix Implemented
+1. Updated `orderSchema` to validate the `id` parameter as a valid MongoDB ObjectId.
+2. Registered the validation middleware for the `GET /:id` route in `orderRoutes.js`.
+3. This ensures `req.validatedData` is correctly populated before the controller is called.
+
+### Test Results
+- ✅ Valid order ID: Returns order details (Status 200)
+- ✅ Invalid order ID: Returns validation error (Status 400)
+- ✅ All 143 backend tests passing (including 2 new regression tests)
+
+---
+📝 Document updated: 2026-11-03
 👤 Last updated by: Claude Code

@@ -36,7 +36,9 @@ const orderSchema = z.object({
         notes: z.string().trim().max(1000).optional(),
     }).strict(),
 
-    params: z.object({}),
+    params: z.object({
+        id: z.string().regex(/^[a-f\d]{24}$/i, 'Invalid order ID'),
+    }),
     query: z.object({}),
 });
 

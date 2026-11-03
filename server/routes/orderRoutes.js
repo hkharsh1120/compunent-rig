@@ -51,6 +51,6 @@ router.patch(
 );
 
 // Customer: own order details; admin: any order
-router.get('/:id', getOrderById);
+router.get('/:id', validate(orderSchema), getOrderById);
 
 module.exports = router;
