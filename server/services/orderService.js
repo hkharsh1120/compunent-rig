@@ -15,12 +15,14 @@ const createOrder = async (userId, data) => {
 
         await session.withTransaction(async () => {
             // Combine duplicate product IDs in the cart
+            // Use string representation as Map keys for consistent lookups
             const quantities = new Map();
 
             for (const item of data.items) {
+                const productIdStr = item.productId.toString();
                 quantities.set(
-                    item.productId,
-                    (quantities.get(item.productId) || 0) + item.quantity
+                    productIdStr,
+                    (quantities.get(productIdStr) || 0) + item.quantity
                 );
             }
 
@@ -67,12 +69,7 @@ const createOrder = async (userId, data) => {
 
             // Calculate coupon discount
             let discount = 0;
-            let couponInfo = {
-                code: '',
-                type: '',
-                value: 0,
-                maxDiscount: 0,
-            };
+            let couponInfo = {};
 
             if (data.coupon?.code) {
                 const coupon = await Coupon.findOne({
@@ -192,24 +189,28 @@ const createOrder = async (userId, data) => {
                 .toString('hex')
                 .toUpperCase()}`;
 
-            const [order] = await Order.create(
-                [{
-                    orderNumber,
-                    user: userId,
-                    items: orderItems,
-                    customerDetails: {
-                        ...data.customerDetails,
-                        email: data.customerDetails.email.toLowerCase(),
-                    },
-                    subtotal,
-                    discount,
-                    totalAmount,
-                    coupon: couponInfo,
-                    paymentMethod: data.paymentMethod,
-                    notes: data.notes || '',
-                }],
-                { session }
-            );
+            // Build order object, conditionally include coupon if one was applied
+            const orderDoc = {
+                orderNumber,
+                user: userId,
+                items: orderItems,
+                customerDetails: {
+                    ...data.customerDetails,
+                    email: data.customerDetails.email.toLowerCase(),
+                },
+                subtotal,
+                discount,
+                totalAmount,
+                paymentMethod: data.paymentMethod,
+                notes: data.notes || '',
+            };
+
+            // Only include coupon field if a valid coupon was applied
+            if (Object.keys(couponInfo).length > 0) {
+                orderDoc.coupon = couponInfo;
+            }
+
+            const [order] = await Order.create([orderDoc], { session });
 
             // Update history entries with order reference and insert into StockHistory collection
             const orderHistoryEntries = stockHistoryEntries.map(entry => ({
@@ -302,8 +303,8 @@ const updateOrderStatus = async (id, orderStatus) => {
                     throw new ApiError(400, 'Cannot cancel a shipped order - items are in transit');
                 }
 
-                // Restore coupon usage if coupon was applied
-                if (currentOrder.coupon?.code && currentOrder.coupon?.type) {
+                // Restore coupon usage if coupon was applied (type must be valid enum value)
+                if (currentOrder.coupon?.code && (currentOrder.coupon.type === 'percentage' || currentOrder.coupon.type === 'fixed')) {
                     const coupon = await Coupon.findOne({ code: currentOrder.coupon.code }).session(session);
                     if (coupon) {
                         coupon.usageCount = Math.max(0, coupon.usageCount - 1);

@@ -305,5 +305,82 @@ Multiple issues found:
 ✅ Completed - Full registration, login, and logout flow verified with actual MongoDB database.
 
 ---
+
+## Order Creation Bug Fix - Coupon Validation
+
+### Root Cause
+Two issues were found in order creation:
+
+1. **Coupon Schema Issue**: The `coupon.type` field in the Order model had `default: ''` (empty string), but the enum only allows `['percentage', 'fixed']`. When creating an order without a coupon, the empty string violated the enum constraint, causing: "coupon.type: "" is not a valid enum value for path coupon.type"
+
+2. **Map Key Type Mismatch**: In `orderService.js`, the `quantities` Map was using ObjectId instances as keys (from `item.productId`), but lookups used `product._id.toString()` (string). Since JavaScript Maps use reference equality for objects, different ObjectId instances with the same value are NOT the same key. This caused:
+   - `quantities.get(product._id.toString())` returned `undefined`
+   - `item.quantity` became `NaN` in arithmetic
+   - `{ $inc: { stock: -NaN } }` caused "Cast to Number failed for value NaN"
+
+### HTTP Status and Error
+- **Status:** 400 Bad Request (validation error)
+- **Original sanitized error:** "Order validation failed: coupon.type: "" is not a valid enum value for path coupon.type"
+
+### Files Modified
+1. `server/models/Order.js` - Changed `coupon.type` default from `''` to `null`
+2. `server/services/orderService.js` - 
+   - Changed `couponInfo` initialization to empty object `{}` (no coupon)
+   - Added conditional coupon field inclusion (only when couponapplied)
+   - Fixed Map key type mismatch by using `toString()` consistently for both set and get operations
+
+### Fix Implemented
+1. **Order Schema**: Changed `coupon.type` default to `null` so empty coupon objects don't violate enum
+2. **couponInfo**: Initialize as `{}` instead of `{code: '', type: '', value: 0, maxDiscount: 0}` to avoid invalid enum values
+3. **Coupon Field**: Only include `coupon` field in order document when a valid coupon is applied (check `Object.keys(couponInfo).length > 0`)
+4. **Map Keys**: Use string representation consistently: `quantities.set(item.productId.toString(), ...)` and `quantities.get(product._id.toString())`
+
+### How Orders Are Stored
+
+**Order WITHOUT coupon:**
+```javascript
+{
+    orderNumber: "CR-...",
+    user: ObjectId(...),
+    items: [...],
+    subtotal: 100,
+    discount: 0,
+    totalAmount: 100,
+    // coupon field is NOT included
+    paymentMethod: "offline",
+    ...
+}
+```
+
+**Order WITH coupon:**
+```javascript
+{
+    orderNumber: "CR-...",
+    user: ObjectId(...),
+    items: [...],
+    subtotal: 100,
+    discount: 10,
+    totalAmount: 90,
+    coupon: {
+        code: "TEST10",
+        type: "percentage",  // Valid enum value
+        value: 10,
+        maxDiscount: 0
+    },
+    paymentMethod: "offline",
+    ...
+}
+```
+
+### Test Results
+- ✅ Order without coupon: Created successfully with no coupon field
+- ✅ Order with percentage coupon: Discount calculated correctly (10% off)
+- ✅ Coupon usage count incremented on order
+- ✅ All 141 backend tests passing
+
+### MongoDB Runtime Testing
+✅ Completed - Orders without coupon and with coupon both created successfully.
+
+---
 📝 Document updated: 2026-11-02
 👤 Last updated by: Claude Code
