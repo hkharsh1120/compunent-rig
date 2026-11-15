@@ -52,10 +52,26 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     );
 });
 
+const cancelMyOrder = asyncHandler(async (req, res) => {
+    const order = await orderService.cancelMyOrder(
+        req.validatedData.params.id,
+        req.user._id
+    );
+
+    res.status(200).json(
+        new ApiResponse(
+            200,
+            'Order cancelled successfully. Stock has been restored.',
+            order
+        )
+    );
+});
+
 module.exports = {
     createOrder,
     getMyOrders,
     getOrderById,
     getAllOrders,
     updateOrderStatus,
+    cancelMyOrder,
 };

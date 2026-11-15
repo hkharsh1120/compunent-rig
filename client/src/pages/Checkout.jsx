@@ -4,7 +4,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { createOrder } from '../services/orderService';
-import { applyCoupon } from '../services/adminCouponService';
 
 const Checkout = () => {
     const { user } = useAuth();
@@ -23,51 +22,14 @@ const Checkout = () => {
         notes: '',
     });
 
-    const [couponCode, setCouponCode] = useState('');
-    const [appliedCoupon, setAppliedCoupon] = useState(null);
-    const [applyingCoupon, setApplyingCoupon] = useState(false);
-
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-
-    const finalTotal = appliedCoupon ? appliedCoupon.finalAmount : cartTotal;
-    const discountAmount = appliedCoupon ? cartTotal - appliedCoupon.finalAmount : 0;
 
     const handleChange = (e) => {
         setFormData(current => ({
             ...current,
             [e.target.name]: e.target.value,
         }));
-    };
-
-    const handleApplyCoupon = async () => {
-        if (!couponCode.trim()) {
-            setError('Please enter a coupon code.');
-            return;
-        }
-
-        setApplyingCoupon(true);
-        setError('');
-
-        try {
-            const result = await applyCoupon({
-                code: couponCode.trim(),
-                orderAmount: cartTotal,
-            });
-
-            setAppliedCoupon(result);
-            setCouponCode('');
-        } catch (err) {
-            setError(err.response?.data?.message || 'Invalid coupon code.');
-            setAppliedCoupon(null);
-        } finally {
-            setApplyingCoupon(false);
-        }
-    };
-
-    const handleRemoveCoupon = () => {
-        setAppliedCoupon(null);
-        setCouponCode('');
     };
 
     const handleSubmit = async (e) => {
@@ -101,18 +63,6 @@ const Checkout = () => {
                 paymentMethod: formData.paymentMethod,
                 notes: formData.notes,
             };
-
-            // Include coupon info in order
-            if (appliedCoupon) {
-                orderData.coupon = {
-                    code: appliedCoupon.code,
-                    type: appliedCoupon.type,
-                    value: appliedCoupon.value,
-                    maxDiscount: appliedCoupon.maxDiscount,
-                };
-                orderData.discount = appliedCoupon.discount;
-                orderData.totalAmount = appliedCoupon.finalAmount;
-            }
 
             const order = await createOrder(orderData);
 
@@ -198,62 +148,6 @@ const Checkout = () => {
                             </div>
                         ))}
 
-                        {/* Coupon Section */}
-                        <div>
-                            <label className="mb-2 block text-sm text-gray-300">
-                                Coupon Code (Optional)
-                            </label>
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    placeholder="Enter coupon code"
-                                    value={couponCode}
-                                    onChange={(e) => setCouponCode(e.target.value)}
-                                    className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 outline-none focus:border-blue-500"
-                                    disabled={applyingCoupon}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={handleApplyCoupon}
-                                    disabled={applyingCoupon || !couponCode.trim()}
-                                    className="rounded-lg bg-blue-600 px-4 py-3 font-semibold hover:bg-blue-700 disabled:opacity-60"
-                                >
-                                    {applyingCoupon ? 'Applying...' : 'Apply'}
-                                </button>
-                            </div>
-                            {appliedCoupon && (
-                                <div className="mt-2 rounded-lg bg-green-900/20 border border-green-600 p-3">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <span className="font-medium">Coupon: {appliedCoupon.code}</span>
-                                            <span className="ml-2 text-xs text-gray-400">
-                                                ({appliedCoupon.type === 'percentage'
-                                                    ? `${appliedCoupon.value}% off`
-                                                    : `₹${appliedCoupon.value} off`
-                                                })
-                                            </span>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={handleRemoveCoupon}
-                                            className="text-red-400 hover:underline text-sm"
-                                        >
-                                            Remove
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {discountAmount > 0 && (
-                                <div className="mt-2 rounded-lg bg-yellow-900/20 border border-yellow-600 p-3">
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-gray-300">Discount Applied</span>
-                                        <span className="text-yellow-400">-₹{discountAmount.toLocaleString('en-IN')}</span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
                         <div>
                             <label className="mb-2 block text-sm text-gray-300">
                                 Payment Method
@@ -324,22 +218,11 @@ const Checkout = () => {
                                 <span className="text-gray-400">Subtotal</span>
                                 <span>₹{cartTotal.toLocaleString('en-IN')}</span>
                             </div>
-
-                            {appliedCoupon && (
-                                <>
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-yellow-400">Discount</span>
-                                        <span className="text-yellow-400">-₹{discountAmount.toLocaleString('en-IN')}</span>
-                                    </div>
-                                </>
-                            )}
                         </div>
 
                         <div className="mt-6 flex justify-between border-t border-gray-700 pt-5 text-lg font-bold">
                             <span>Final Total</span>
-                            <span className={appliedCoupon ? 'text-green-400' : ''}>
-                                ₹{finalTotal.toLocaleString('en-IN')}
-                            </span>
+                            <span>₹{cartTotal.toLocaleString('en-IN')}</span>
                         </div>
 
                         <p className="mt-4 text-xs text-gray-500">

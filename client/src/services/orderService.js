@@ -15,38 +15,11 @@ export const getOrderById = async (id) => {
     return response.data.data;
 };
 
-// Cancellation services
-export const requestOrderCancellation = async (orderId, reason) => {
-    const response = await api.post(`/api/returns/cancellations/${orderId}`, { reason });
-    return response.data.data;
-};
-
-export const getOrderCancellationStatus = async (orderId) => {
-    const response = await api.get(`/api/returns/cancellations/${orderId}`);
-    return response.data.data;
-};
-
-export const cancelOrder = async (orderId) => {
-    const response = await api.patch(`/api/returns/cancellations/${orderId}/confirm`);
-    return response.data.data;
-};
-
-// Return services
-export const createReturnRequest = async (orderId, items, reason, description) => {
-    const response = await api.post(`/api/returns/orders/${orderId}/returns`, {
-        items,
+// Customers can cancel an order before it ships.
+export const cancelOrder = async (orderId, reason) => {
+    const response = await api.patch(`/api/orders/${orderId}/cancel`, {
         reason,
-        description,
     });
-    return response.data.data;
-};
 
-export const getMyReturnRequests = async () => {
-    const response = await api.get('/api/returns/my-returns');
-    return response.data.data;
-};
-
-export const getReturnRequest = async (id) => {
-    const response = await api.get(`/api/returns/my-returns/${id}`);
     return response.data.data;
 };

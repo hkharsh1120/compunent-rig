@@ -6,6 +6,7 @@ const {
     getOrderById,
     getAllOrders,
     updateOrderStatus,
+    cancelMyOrder,
 } = require('../controllers/orderController');
 
 const validate = require('../middleware/validateMiddleware');
@@ -17,8 +18,13 @@ const {
 
 const {
     orderSchema,
+    orderIdSchema,
     updateOrderStatusSchema,
 } = require('../validators/orderValidator');
+
+const {
+    cancellationRequestSchema,
+} = require('../validators/orderCancellationValidator');
 
 const router = express.Router();
 
@@ -50,7 +56,14 @@ router.patch(
     updateOrderStatus
 );
 
+// Customer: cancel an order before it ships
+router.patch(
+    '/:id/cancel',
+    validate(cancellationRequestSchema),
+    cancelMyOrder
+);
+
 // Customer: own order details; admin: any order
-router.get('/:id', validate(orderSchema), getOrderById);
+router.get('/:id', validate(orderIdSchema), getOrderById);
 
 module.exports = router;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getMyOrders, getOrderCancellationStatus, requestOrderCancellation, cancelOrder } from '../services/orderService';
+import { getMyOrders, cancelOrder } from '../services/orderService';
 
 const statusStyles = {
     pending: 'bg-yellow-900/40 text-yellow-400',
@@ -9,29 +9,31 @@ const statusStyles = {
     shipped: 'bg-indigo-900/40 text-indigo-400',
     delivered: 'bg-green-900/40 text-green-400',
     cancelled: 'bg-red-900/40 text-red-400',
-    returned: 'bg-teal-900/40 text-teal-400',
 };
 
-// Statuses that are eligible for cancellation
-const cancellableStatuses = ['pending', 'confirmed', 'processing', 'shipped'];
-
-// Statuses that are eligible for return (must be delivered first)
-const returnableStatuses = ['delivered'];
+// Backend only allows cancellation before an order ships.
+const cancellableStatuses = ['pending', 'confirmed', 'processing'];
 
 const MyOrders = () => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [cancellingOrderId, setCancellingOrderId] = useState(null);
-    const [returnModalOpen, setReturnModalOpen] = useState(null);
-    const [returnReason, setReturnReason] = useState('');
-    const [returnDescription, setReturnDescription] = useState('');
+    const [success, setSuccess] = useState('');
+
+    // Cancellation modal state
+    const [cancelOrderId, setCancelOrderId] = useState(null);
+    const [cancelReason, setCancelReason] = useState('');
+    const [cancelling, setCancelling] = useState(false);
+
+    const loadOrders = async () => {
+        const orderData = await getMyOrders();
+        setOrders(orderData);
+    };
 
     useEffect(() => {
-        const loadOrders = async () => {
+        const load = async () => {
             try {
-                const data = await getMyOrders();
-                setOrders(data);
+                await loadOrders();
             } catch (err) {
                 setError(
                     err.response?.data?.message ||
@@ -42,33 +44,42 @@ const MyOrders = () => {
             }
         };
 
-        loadOrders();
+        load();
     }, []);
 
-    const handleCancellation = async (orderId) => {
-        try {
-            // Request cancellation
-            await requestOrderCancellation(orderId, 'Customer requested cancellation');
-
-            // Confirm cancellation
-            await cancelOrder(orderId);
-
-            // Refresh orders
-            const data = await getMyOrders();
-            setOrders(data);
-        } catch (err) {
-            setError(err.response?.data?.message || 'Unable to cancel order.');
-        }
+    const openCancelModal = (orderId) => {
+        setCancelOrderId(orderId);
+        setCancelReason('');
+        setError('');
+        setSuccess('');
     };
 
-    const handleReturnRequest = async (orderId) => {
+    const handleCancellation = async (event) => {
+        event.preventDefault();
+
+        if (!cancelReason.trim()) {
+            setError('Please provide a reason for cancelling your order.');
+            return;
+        }
+
+        setCancelling(true);
+        setError('');
+        setSuccess('');
+
         try {
-            // For now, we'll just open a modal to collect reason
-            // In a real implementation, you'd also need to select items
-            const data = await getOrderCancellationStatus(orderId);
-            setError('Return request created. Check email for next steps.');
+            await cancelOrder(cancelOrderId, cancelReason.trim());
+
+            setSuccess('Your order has been cancelled successfully.');
+            setCancelOrderId(null);
+            setCancelReason('');
+
+            await loadOrders();
         } catch (err) {
-            setError(err.response?.data?.message || 'Unable to create return request.');
+            setError(
+                err.response?.data?.message || 'Unable to cancel order.'
+            );
+        } finally {
+            setCancelling(false);
         }
     };
 
@@ -92,6 +103,12 @@ const MyOrders = () => {
                     </p>
                 )}
 
+                {success && (
+                    <p className="rounded-lg bg-green-950 p-4 text-green-400 mb-4">
+                        {success}
+                    </p>
+                )}
+
                 {!error && orders.length === 0 ? (
                     <div className="rounded-xl border border-gray-800 bg-gray-900 p-10 text-center">
                         <h2 className="text-xl font-semibold">
@@ -108,8 +125,7 @@ const MyOrders = () => {
                 ) : (
                     <div className="space-y-5">
                         {orders.map(order => {
-                            const canCancel = cancellableStatuses.includes(order.orderStatus) && !order.returnRequested;
-                            const canReturn = returnableStatuses.includes(order.orderStatus) && !order.returnRequested;
+                            const canCancel = cancellableStatuses.includes(order.orderStatus);
 
                             return (
                             <article
@@ -152,7 +168,7 @@ const MyOrders = () => {
                                         </p>
 
                                         <p className="font-bold">
-                                            ₹{order.totalAmount.toLocaleString('en-IN')}
+                                            ₹{Number(order.totalAmount).toLocaleString('en-IN')}
                                         </p>
                                     </div>
 
@@ -169,22 +185,10 @@ const MyOrders = () => {
                                 {canCancel && (
                                     <div className="mt-4 flex gap-3">
                                         <button
-                                            onClick={() => handleCancellation(order._id)}
-                                            disabled={cancellingOrderId === order._id}
-                                            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                                            onClick={() => openCancelModal(order._id)}
+                                            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
                                         >
-                                            {cancellingOrderId === order._id ? 'Cancelling...' : 'Cancel Order'}
-                                        </button>
-                                    </div>
-                                )}
-
-                                {canReturn && (
-                                    <div className="mt-4 flex gap-3">
-                                        <button
-                                            onClick={() => setReturnModalOpen(order._id)}
-                                            className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700"
-                                        >
-                                            Request Return
+                                            Cancel Order
                                         </button>
                                     </div>
                                 )}
@@ -198,6 +202,57 @@ const MyOrders = () => {
                             </article>
                             );
                         })}
+                    </div>
+                )}
+
+                {/* Cancellation Reason Modal */}
+                {cancelOrderId && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+                        <form
+                            onSubmit={handleCancellation}
+                            className="w-full max-w-md rounded-xl border border-gray-800 bg-gray-900 p-6 text-white"
+                        >
+                            <h2 className="text-xl font-semibold">
+                                Cancel Order
+                            </h2>
+
+                            <p className="mt-2 text-sm text-gray-400">
+                                Please tell us why you want to cancel this order.
+                            </p>
+
+                            <textarea
+                                value={cancelReason}
+                                onChange={(event) =>
+                                    setCancelReason(event.target.value)
+                                }
+                                required
+                                maxLength={500}
+                                rows={4}
+                                placeholder="Reason for cancellation..."
+                                className="mt-4 w-full rounded-lg border border-gray-700 bg-gray-800 p-3 outline-none focus:border-blue-500"
+                            />
+
+                            <div className="mt-5 flex justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setCancelOrderId(null)}
+                                    disabled={cancelling}
+                                    className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-800 disabled:opacity-50"
+                                >
+                                    Keep Order
+                                </button>
+
+                                <button
+                                    type="submit"
+                                    disabled={cancelling}
+                                    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                                >
+                                    {cancelling
+                                        ? 'Cancelling...'
+                                        : 'Confirm Cancellation'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 )}
 

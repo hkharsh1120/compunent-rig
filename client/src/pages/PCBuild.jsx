@@ -218,6 +218,10 @@ const PCBuild = () => {
             setError('Your selected components are incompatible. Please fix the issues before submitting.');
             return;
         }
+        if (!form.budget || !form.purpose) {
+            setError('Please select your budget and primary purpose.');
+            return;
+        }
 
         setLoading(true);
         setError('');
@@ -242,8 +246,10 @@ const PCBuild = () => {
 
         try {
             await submitPCBuildRequest({
-                ...form,
-                requirements,
+                phone: form.phone,
+                budget: Number(form.budget),
+                purpose: form.purpose,
+                requirements: requirements.slice(0, 2000),
             });
 
             setSuccess(
@@ -475,19 +481,19 @@ const PCBuild = () => {
                                         <option value="">
                                             Select your budget
                                         </option>
-                                        <option value="Under ₹30,000">
+                                        <option value={25000}>
                                             Under ₹30,000
                                         </option>
-                                        <option value="₹30,000 - ₹50,000">
+                                        <option value={40000}>
                                             ₹30,000 - ₹50,000
                                         </option>
-                                        <option value="₹50,000 - ₹75,000">
+                                        <option value={62500}>
                                             ₹50,000 - ₹75,000
                                         </option>
-                                        <option value="₹75,000 - ₹1,00,000">
+                                        <option value={87500}>
                                             ₹75,000 - ₹1,00,000
                                         </option>
-                                        <option value="Above ₹1,00,000">
+                                        <option value={100000}>
                                             Above ₹1,00,000
                                         </option>
                                     </select>
@@ -508,23 +514,23 @@ const PCBuild = () => {
                                         <option value="">
                                             Select purpose
                                         </option>
-                                        <option value="Gaming">Gaming</option>
-                                        <option value="Video Editing">
+                                        <option value="gaming">Gaming</option>
+                                        <option value="editing">
                                             Video Editing
                                         </option>
-                                        <option value="Programming and Development">
+                                        <option value="programming">
                                             Programming and Development
                                         </option>
-                                        <option value="Office and Productivity">
+                                        <option value="office">
                                             Office and Productivity
                                         </option>
-                                        <option value="AI and Machine Learning">
+                                        <option value="workstation">
                                             AI and Machine Learning
                                         </option>
-                                        <option value="Workstation">
+                                        <option value="workstation">
                                             Workstation
                                         </option>
-                                        <option value="Other">Other</option>
+                                        <option value="other">Other</option>
                                     </select>
                                 </div>
 

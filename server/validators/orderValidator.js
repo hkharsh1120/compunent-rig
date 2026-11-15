@@ -36,6 +36,12 @@ const orderSchema = z.object({
         notes: z.string().trim().max(1000).optional(),
     }).strict(),
 
+    params: z.object({}),
+    query: z.object({}),
+});
+
+const orderIdSchema = z.object({
+    body: z.any().optional(),
     params: z.object({
         id: z.string().regex(/^[a-f\d]{24}$/i, 'Invalid order ID'),
     }),
@@ -45,6 +51,7 @@ const orderSchema = z.object({
 const updateOrderStatusSchema = z.object({
     body: z.object({
         orderStatus: z.enum([
+            'pending',
             'confirmed',
             'processing',
             'shipped',
@@ -62,5 +69,6 @@ const updateOrderStatusSchema = z.object({
 
 module.exports = {
     orderSchema,
+    orderIdSchema,
     updateOrderStatusSchema,
 };

@@ -30,13 +30,25 @@ const Login = () => {
         try {
             const response = await login(formData);
 
-            const requestedPath = location.state?.from?.pathname;
+            const isAdmin = response.data.user.role === 'admin';
+            const from = location.state?.from;
+            const requestedPath = from
+                ? `${from.pathname}${from.search || ''}`
+                : null;
 
-            if (response.data.user.role === 'admin') {
-                navigate('/admin/dashboard');
-            } else {
-                navigate(requestedPath || '/');
-            }
+            // Return to the page the user originally requested when it is
+            // allowed for their role; otherwise fall back by role.
+            const canUseRequestedPath =
+                requestedPath &&
+                (isAdmin || !requestedPath.startsWith('/admin'));
+
+            const destination = canUseRequestedPath
+                ? requestedPath
+                : isAdmin
+                    ? '/admin/dashboard'
+                    : '/';
+
+            navigate(destination, { replace: true });
         } catch (err) {
             setError(
                 err.response?.data?.message ||

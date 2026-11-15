@@ -131,26 +131,6 @@ const orderSchema = new mongoose.Schema(
             min: 0,
         },
 
-        coupon: {
-            code: {
-                type: String,
-                default: '',
-            },
-            type: {
-                type: String,
-                enum: ['percentage', 'fixed'],
-                default: null,
-            },
-            value: {
-                type: Number,
-                default: 0,
-            },
-            maxDiscount: {
-                type: Number,
-                default: 0,
-            },
-        },
-
         orderStatus: {
             type: String,
             enum: [
@@ -165,7 +145,7 @@ const orderSchema = new mongoose.Schema(
             default: 'pending',
         },
 
-        // Track when order was delivered for return window calculation
+        // Track when the order was delivered.
         deliveredAt: {
             type: Date,
             default: null,

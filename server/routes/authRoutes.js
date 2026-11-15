@@ -1,4 +1,5 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 
 const {
     register,
@@ -17,9 +18,22 @@ const {
 
 const router = express.Router();
 
-router.post('/register', validate(registerSchema), register);
+// Throttle credential endpoints to slow down brute-force attempts.
+// 20 attempts per IP per 15 minutes keeps normal testing unaffected.
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: {
+        success: false,
+        message: 'Too many authentication attempts. Please try again later.',
+    },
+});
 
-router.post('/login', validate(loginSchema), login);
+router.post('/register', authLimiter, validate(registerSchema), register);
+
+router.post('/login', authLimiter, validate(loginSchema), login);
 
 router.post('/logout', logout);
 

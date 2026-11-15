@@ -3,14 +3,18 @@ const jwt = require('jsonwebtoken');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiResponse = require('../utils/ApiResponse');
 const authService = require('../services/authService');
-const cookieOptions = require('../utils/cookieOptions');
+const {
+    cookieOptions,
+    cookieMaxAge,
+    jwtExpiresIn,
+} = require('../utils/cookieOptions');
 
 const generateToken = (userId) => {
     return jwt.sign(
         { userId },
         process.env.JWT_SECRET,
         {
-            expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+            expiresIn: jwtExpiresIn,
         }
     );
 };
@@ -31,7 +35,7 @@ const register = asyncHandler(async (req, res) => {
 
     res.cookie('token', token, {
         ...cookieOptions,
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+        maxAge: cookieMaxAge,
     });
 
     res.status(201).json(
@@ -48,7 +52,7 @@ const login = asyncHandler(async (req, res) => {
 
     res.cookie('token', token, {
         ...cookieOptions,
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+        maxAge: cookieMaxAge,
     });
 
     res.status(200).json(

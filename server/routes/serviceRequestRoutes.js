@@ -3,6 +3,12 @@ const express = require('express');
 const router = express.Router();
 
 const { protect } = require('../middleware/authMiddleware');
+const validate = require('../middleware/validateMiddleware');
+
+const {
+    pcBuildSchema,
+    laptopUpgradeSchema,
+} = require('../validators/serviceValidator');
 
 const {
     createPCBuildRequest,
@@ -11,7 +17,7 @@ const {
 
 router.use(protect);
 
-router.post('/build', createPCBuildRequest);
-router.post('/upgrade', createLaptopUpgradeRequest);
+router.post('/build', validate(pcBuildSchema), createPCBuildRequest);
+router.post('/upgrade', validate(laptopUpgradeSchema), createLaptopUpgradeRequest);
 
 module.exports = router;

@@ -186,6 +186,7 @@ const LaptopUpgrade = () => {
                             onChange={handleChange}
                             required
                             rows="3"
+                            maxLength={1000}
                             placeholder="Current RAM, storage, processor, and other specifications..."
                             className="w-full rounded-lg border p-3"
                         />
@@ -201,7 +202,7 @@ const LaptopUpgrade = () => {
                             onChange={handleChange}
                             required
                             minLength={10}
-                            maxLength={3000}
+                            maxLength={2000}
                             rows="5"
                             placeholder="Describe your desired RAM or storage capacity and any other requirements..."
                             className="w-full rounded-lg border p-3"

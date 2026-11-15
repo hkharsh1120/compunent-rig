@@ -4,10 +4,8 @@ import LogoutButton from '../components/LogoutButton';
 const navigation = [
     { name: 'Dashboard', path: '/admin/dashboard' },
     { name: 'Products', path: '/admin/products' },
-    { name: 'Inventory', path: '/admin/inventory' },
     { name: 'Categories & Brands', path: '/admin/catalog' },
     { name: 'Orders', path: '/admin/orders' },
-    { name: 'Coupons', path: '/admin/coupons' },
     { name: 'Service Requests', path: '/admin/service-requests' },
     { name: 'Customers', path: '/admin/customers' },
 ];
